@@ -9,11 +9,79 @@ local playerData = {
     currentWeapon = nil,
     currentWeaponIndex = 0,
     godMode = false,
-    playerName = nil
+    playerName = nil,
+    lastSpawnPoint = nil
 }
 
 local hudVisible = false
 local lastKillCheck = 0
+
+-- ============================================================================
+-- ÉVÉNEMENTS ARMES (EN PREMIER - AVANT TOUT)
+-- ============================================================================
+
+RegisterNetEvent('gungame:giveWeaponDirect')
+AddEventHandler('gungame:giveWeaponDirect', function(weapon, ammo)
+    local ped = PlayerPedId()
+    
+    print("^2[GunGame Client]^7 Réception giveWeaponDirect - Arme: " .. weapon .. " Ammo: " .. ammo)
+    
+    -- Retirer toutes les armes
+    RemoveAllPedWeapons(ped, true)
+    Wait(100)
+    
+    -- Donner l'arme directement
+    local weaponHash = GetHashKey(weapon)
+    GiveWeaponToPed(ped, weaponHash, ammo, false, true)
+    SetCurrentPedWeapon(ped, weaponHash, true)
+    
+    playerData.currentWeapon = weapon
+    
+    print("^2[GunGame Client]^7 Arme donnée avec succès: " .. weapon)
+    
+    lib.notify({
+        title = '🔫 Arme',
+        description = weapon,
+        type = 'success',
+        duration = 2000
+    })
+end)
+
+RegisterNetEvent('weapon:give')
+AddEventHandler('weapon:give', function(weapon, ammo)
+    local ped = PlayerPedId()
+    
+    print("^2[GunGame Client]^7 Réception weapon:give - Arme: " .. weapon .. " Ammo: " .. ammo)
+    
+    GiveWeaponToPed(ped, GetHashKey(weapon), ammo, false, true)
+    SetCurrentPedWeapon(ped, GetHashKey(weapon), true)
+    
+    playerData.currentWeapon = weapon
+    playerData.currentWeaponIndex = playerData.currentWeaponIndex + 1
+    
+    print("^2[GunGame Client]^7 Arme donnée: " .. weapon)
+    
+    lib.notify({
+        title = '🔫 Arme',
+        description = weapon,
+        type = 'success',
+        duration = 2000
+    })
+end)
+
+RegisterNetEvent('gungame:clearWeapons')
+AddEventHandler('gungame:clearWeapons', function()
+    print("^2[GunGame Client]^7 Réception clearWeapons")
+    RemoveAllPedWeapons(PlayerPedId(), true)
+end)
+
+RegisterNetEvent('gungame:clearAllInventory')
+AddEventHandler('gungame:clearAllInventory', function()
+    print("^2[GunGame Client]^7 Clearing all inventory...")
+    TriggerEvent('ox_inventory:disarm')
+    RemoveAllPedWeapons(PlayerPedId(), true)
+    print("^2[GunGame Client]^7 Inventory cleared")
+end)
 
 -- ============================================================================
 -- INITIALISATION
@@ -88,6 +156,9 @@ AddEventHandler('gungame:teleportToLobby', function(lobbyId)
     local spawn = Config.Lobbys[lobbyId].spawnPoint
     local ped = PlayerPedId()
     
+    -- Sauvegarder le spawn avant d'entrer
+    playerData.lastSpawnPoint = GetEntityCoords(ped)
+    
     playerData.inGame = true
     playerData.lobbyId = lobbyId
     playerData.kills = 0
@@ -97,7 +168,7 @@ AddEventHandler('gungame:teleportToLobby', function(lobbyId)
     SetEntityCoords(ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
     SetEntityHeading(ped, spawn.heading)
     
-    -- Activer le godmode temporaire
+    -- Activer le godmode temporaire SANS retirer les armes ici
     enableGodMode()
     
     -- Afficher notification
@@ -146,27 +217,7 @@ AddEventHandler('gungame:respawnPlayer', function(lobbyId, weapon)
     })
 end)
 
-RegisterNetEvent('gungame:clearWeapons')
-AddEventHandler('gungame:clearWeapons', function()
-    RemoveAllPedWeapons(PlayerPedId(), true)
-end)
 
-RegisterNetEvent('weapon:give')
-AddEventHandler('weapon:give', function(weapon, ammo)
-    local ped = PlayerPedId()
-    
-    GiveWeaponToPed(ped, GetHashKey(weapon), ammo, false, true)
-    SetCurrentPedWeapon(ped, GetHashKey(weapon), true)
-    
-    playerData.currentWeapon = weapon
-    
-    lib.notify({
-        title = '🔫 Arme',
-        description = weapon,
-        type = 'inform',
-        duration = 2000
-    })
-end)
 
 -- ============================================================================
 -- GODMODE TEMPORAIRE
@@ -324,34 +375,32 @@ function drawGunGameHUD()
 end
 
 -- ============================================================================
--- ZONES DE COMBAT (DEBUG)
+-- ZONES DE COMBAT (VISIBLES POUR LES JOUEURS EN LOBBY)
 -- ============================================================================
 
-if Config.Debug and Config.DebugZones then
-    Citizen.CreateThread(function()
-        while true do
-            Wait(0)
+Citizen.CreateThread(function()
+    while true do
+        Wait(0)
+        
+        if playerData.inGame and playerData.lobbyId then
+            local zone = Config.Lobbys[playerData.lobbyId].battleZone
             
-            for lobbyKey, lobbyData in pairs(Config.Lobbys) do
-                local zone = lobbyData.battleZone
-                
-                -- Dessiner un marqueur sphérique
-                DrawMarker(
-                    1, -- Type sphère
-                    zone.x, zone.y, zone.z,
-                    0, 0, 0,
-                    0, 0, 0,
-                    zone.radius * 2, zone.radius * 2, zone.radius * 2,
-                    255, 0, 0, 100,
-                    false, true, 2, false, nil, nil, false
-                )
-                
-                -- Afficher le nom du lobby
-                DrawText3D(zone.x, zone.y, zone.z + 20, lobbyKey:upper())
-            end
+            -- Dessiner un marqueur sphérique (visible uniquement si en partie)
+            DrawMarker(
+                1, -- Type sphère
+                zone.x, zone.y, zone.z,
+                0, 0, 0,
+                0, 0, 0,
+                zone.radius * 2, zone.radius * 2, zone.radius * 2,
+                255, 0, 0, 100,
+                false, true, 2, false, nil, nil, false
+            )
+            
+            -- Afficher le nom du lobby
+            DrawText3D(zone.x, zone.y, zone.z + 20, playerData.lobbyId:upper())
         end
-    end)
-end
+    end
+end)
 
 -- ============================================================================
 -- COMMANDES JOUEUR
@@ -365,14 +414,26 @@ TriggerEvent('chat:addSuggestion', '/gungame', 'Ouvrir le menu GunGame', {})
 
 RegisterCommand('leavegame', function()
     if playerData.inGame then
+        local ped = PlayerPedId()
+        local lastSpawn = playerData.lastSpawnPoint
+        
         playerData.inGame = false
         playerData.lobbyId = nil
         playerData.kills = 0
         playerData.currentWeapon = nil
         
-        RemoveAllPedWeapons(PlayerPedId(), true)
+        -- Retirer TOUTES les armes AVANT de quitter
+        RemoveAllPedWeapons(ped, true)
+        Wait(200) -- Laisser le temps de retirer les armes
+        
         lib.hideTextUI()
         
+        -- Téléporter au dernier spawn si on l'a
+        if lastSpawn then
+            SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, false)
+        end
+        
+        -- Déclencher le leave côté serveur (qui restaure l'inventaire)
         TriggerServerEvent('gungame:leaveGame')
         
         lib.notify({
@@ -460,7 +521,7 @@ function DrawText3D(x, y, z, text)
 end
 
 -- ============================================================================
--- ZONES DE RESPAWN (Optional)
+-- ZONES DE RESPAWN
 -- ============================================================================
 
 Citizen.CreateThread(function()

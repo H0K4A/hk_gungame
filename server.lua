@@ -8,6 +8,7 @@ local ESX = exports["es_extended"]:getSharedObject()
 local activeLobbys = {}
 local playerStats = {} -- {[source] = {lobby, kills, currentWeapon, totalKills}}
 local lobbyPlayers = {} -- {[lobbyId] = {source1, source2, ...}}
+local playerInventories = {} -- {[source] = {items, weapons}} - Sauvegarde des inventaires
 
 -- ============================================================================
 -- INITIALISATION
@@ -54,6 +55,12 @@ AddEventHandler('playerDropped', function(reason)
         end
         
         playerStats[source] = nil
+    end
+    
+    -- Restaurer l'inventaire en cas de disconnect
+    if playerInventories[source] then
+        restorePlayerInventory(source, playerInventories[source])
+        playerInventories[source] = nil
     end
     
     print("^3[GunGame]^7 Joueur ^1" .. source .. "^7 a quitté")
@@ -128,6 +135,35 @@ AddEventHandler('gungame:joinLobby', function(lobbyId)
         return
     end
     
+    -- Sauvegarder l'inventaire du joueur (en filtrant les armes GunGame)
+    local allItems = exports.ox_inventory:GetInventoryItems(source)
+    local itemsToSave = {}
+    local gungameWeapons = {}
+    
+    -- Construire la liste des armes GunGame
+    for _, lobby in pairs(Config.Lobbys) do
+        for _, weapon in ipairs(lobby.weapons) do
+            gungameWeapons[weapon] = true
+        end
+    end
+    
+    -- Filtrer les items
+    if allItems then
+        for _, item in ipairs(allItems) do
+            if not gungameWeapons[item.name] then
+                table.insert(itemsToSave, item)
+            end
+        end
+    end
+    
+    playerInventories[source] = {
+        items = itemsToSave,
+        weapons = GetPlayerWeapons(source)
+    }
+    
+    -- Vider l'inventaire
+    TriggerClientEvent('gungame:clearAllInventory', source)
+    
     -- Ajouter le joueur au lobby
     playerStats[source] = {
         lobby = lobbyId,
@@ -143,13 +179,25 @@ AddEventHandler('gungame:joinLobby', function(lobbyId)
         currentWeapon = 1
     }
     lobby.currentPlayers = lobby.currentPlayers + 1
+    lobby.gameActive = true
     
-    -- Donner l'arme initiale
-    local firstWeapon = Config.Lobbys[lobbyId].weapons[1]
-    giveWeaponToPlayer(source, firstWeapon, lobbyId)
-    
-    -- Téléporter et notifier
+    -- Téléporter d'abord
     TriggerClientEvent('gungame:teleportToLobby', source, lobbyId)
+    
+    if Config.Debug then
+        print("^3[GunGame]^7 Teleportation envoyée à " .. xPlayer.getName())
+    end
+    
+    -- PUIS donner l'arme initiale avec un délai plus long
+    local firstWeapon = Config.Lobbys[lobbyId].weapons[1]
+    SetTimeout(2000, function()
+        if Config.Debug then
+            print("^3[GunGame]^7 Tentative de donner l'arme " .. firstWeapon .. " à " .. source)
+        end
+        giveWeaponToPlayer(source, firstWeapon, lobbyId, true) -- true = première arme
+    end)
+    
+    -- Notifier
     TriggerClientEvent('ox_lib:notify', source, {
         title = 'GunGame',
         description = ('Bienvenue dans %s'):format(lobby.label),
@@ -205,7 +253,7 @@ AddEventHandler('gungame:playerKill', function(targetSource)
     else
         playerStats[source].currentWeapon = nextWeaponIndex
         local nextWeapon = weaponsList[nextWeaponIndex]
-        giveWeaponToPlayer(source, nextWeapon, lobbyId)
+        giveWeaponToPlayer(source, nextWeapon, lobbyId, false) -- false = pas la première arme
         
         TriggerClientEvent('ox_lib:notify', source, {
             title = 'Kill !',
@@ -271,6 +319,12 @@ function winnerDetected(source, lobbyId)
     local reward = 500 * playerStats[source].currentWeapon
     xPlayer.addMoney(reward)
     
+    -- Restaurer l'inventaire du gagnant
+    if playerInventories[source] then
+        restorePlayerInventory(source, playerInventories[source])
+        playerInventories[source] = nil
+    end
+    
     -- Sauvegarder et réinitialiser
     savePlayerStatistics(source)
     resetLobby(lobbyId)
@@ -300,21 +354,25 @@ end
 -- FONCTION : DONNER UNE ARME
 -- ============================================================================
 
-function giveWeaponToPlayer(source, weapon, lobbyId)
+function giveWeaponToPlayer(source, weapon, lobbyId, isFirstWeapon)
     local xPlayer = ESX.GetPlayerFromId(source)
-    if not xPlayer then return end
+    if not xPlayer then 
+        print("^1[GunGame]^7 Erreur: Joueur " .. source .. " non trouvé")
+        return 
+    end
     
-    -- Retirer toutes les armes
-    TriggerClientEvent('gungame:clearWeapons', source)
+    if Config.Debug then
+        print("^2[GunGame Server]^7 Fonction giveWeaponToPlayer - Joueur: " .. source .. " Arme: " .. weapon .. " IsFirstWeapon: " .. tostring(isFirstWeapon))
+    end
     
-    -- Attendre un peu puis donner la nouvelle arme
-    SetTimeout(100, function()
-        local ammo = Config.WeaponAmmo[weapon] or 500
-        
-        exports.ox_inventory:AddItem(source, weapon, 1, {ammo = ammo})
-        
-        TriggerClientEvent('weapon:give', source, weapon, ammo)
-    end)
+    local ammo = Config.WeaponAmmo[weapon] or 500
+    
+    -- Envoyer l'arme directement via triggerClientEvent
+    TriggerClientEvent('gungame:giveWeaponDirect', source, weapon, ammo)
+    
+    if Config.Debug then
+        print("^2[GunGame Server]^7 giveWeaponDirect envoyé - Arme: " .. weapon .. " Ammo: " .. ammo)
+    end
 end
 
 -- ============================================================================
@@ -337,6 +395,23 @@ end
 -- ============================================================================
 -- FONCTION : RETIRER UN JOUEUR DU LOBBY
 -- ============================================================================
+
+RegisterNetEvent('gungame:leaveGame')
+AddEventHandler('gungame:leaveGame', function()
+    local source = source
+    
+    if not playerStats[source] then return end
+    
+    local lobbyId = playerStats[source].lobby
+    
+    -- Restaurer l'inventaire AVANT de retirer du lobby
+    if playerInventories[source] then
+        restorePlayerInventory(source, playerInventories[source])
+        playerInventories[source] = nil
+    end
+    
+    removePlayerFromLobby(source, lobbyId)
+end)
 
 function removePlayerFromLobby(source, lobbyId)
     if not activeLobbys[lobbyId] then return end
@@ -379,6 +454,62 @@ function resetLobby(lobbyId)
 end
 
 -- ============================================================================
+-- FONCTION : SAUVEGARDER L'INVENTAIRE
+-- ============================================================================
+
+function GetPlayerWeapons(source)
+    -- Récupérer les armes depuis l'inventaire ox_inventory
+    local items = exports.ox_inventory:GetInventoryItems(source)
+    local weapons = {}
+    
+    -- Liste des armes GunGame à exclure
+    local gungameWeapons = {}
+    for _, lobby in pairs(Config.Lobbys) do
+        for _, weapon in ipairs(lobby.weapons) do
+            gungameWeapons[weapon] = true
+        end
+    end
+    
+    if items then
+        for _, item in ipairs(items) do
+            -- Vérifier si c'est une arme ET que ce n'est pas une arme GunGame
+            if item.metadata and item.metadata.ammo and not gungameWeapons[item.name] then
+                table.insert(weapons, {
+                    name = item.name,
+                    ammo = item.metadata.ammo,
+                    count = item.count
+                })
+            end
+        end
+    end
+    
+    return weapons
+end
+
+-- ============================================================================
+-- FONCTION : RESTAURER L'INVENTAIRE
+-- ============================================================================
+
+function restorePlayerInventory(source, inventory)
+    if not inventory then return end
+    
+    local xPlayer = ESX.GetPlayerFromId(source)
+    if not xPlayer then return end
+    
+    -- Vider l'inventaire actuel
+    exports.ox_inventory:ClearInventory(source)
+    
+    SetTimeout(500, function()
+        -- Restaurer les items
+        if inventory.items then
+            for _, item in ipairs(inventory.items) do
+                exports.ox_inventory:AddItem(source, item.name, item.count, item.metadata)
+            end
+        end
+    end)
+end
+
+-- ============================================================================
 -- PERSISTANCE DES DONNÉES
 -- ============================================================================
 
@@ -397,22 +528,9 @@ function loadPlayerStatistics()
 end
 
 -- ============================================================================
--- EXPORTS
+-- CALLBACKS
 -- ============================================================================
 
-exports('getPlayerLobby', function(source)
-    return playerStats[source] and playerStats[source].lobby or nil
-end)
-
-exports('getPlayerKills', function(source)
-    return playerStats[source] and playerStats[source].kills or 0
-end)
-
-exports('getActiveLobby', function(lobbyId)
-    return activeLobbys[lobbyId]
-end)
-
--- ============================================================================
 lib.callback.register('gungame:getPlayerBracket', function(source)
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then return nil end
@@ -435,5 +553,21 @@ lib.callback.register('gungame:getPlayerBracket', function(source)
 end)
 
 lib.callback.register('gungame:getActiveLobby', function(source, lobbyId)
+    return activeLobbys[lobbyId]
+end)
+
+-- ============================================================================
+-- EXPORTS
+-- ============================================================================
+
+exports('getPlayerLobby', function(source)
+    return playerStats[source] and playerStats[source].lobby or nil
+end)
+
+exports('getPlayerKills', function(source)
+    return playerStats[source] and playerStats[source].kills or 0
+end)
+
+exports('getActiveLobby', function(lobbyId)
     return activeLobbys[lobbyId]
 end)
