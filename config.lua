@@ -1,7 +1,7 @@
 Config = {}
 
 -- Activer/Désactiver le mode debug
-Config.Debug = true
+Config.Debug = false
 
 -- ============================================================================
 -- SYSTÈME DE BRACKETS (Niveaux des joueurs)
