@@ -2,8 +2,8 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'Hoka'
-description 'Advanced GunGame Mini-Game with Lobbys & Brackets'
-version '1.0.0'
+description 'GunGame avec système d\'instance.'
+version '1.0.3'
 
 shared_scripts {
     '@ox_lib/init.lua',

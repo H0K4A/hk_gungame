@@ -4,48 +4,22 @@ Config = {}
 Config.Debug = false
 
 -- ============================================================================
--- SYSTÈME DE BRACKETS (Niveaux des joueurs)
+-- SYSTÈME D'INSTANCES - GUNGAME UNIQUE
 -- ============================================================================
-Config.Brackets = {
-    {
-        name = "Bronze",
-        label = "🥉 Bronze (0-10 kills)",
-        minKills = 0,
-        maxKills = 10,
-        color = {r = 205, g = 127, b = 50, a = 200}
-    },
-    {
-        name = "Silver",
-        label = "🥈 Silver (11-50 kills)",
-        minKills = 11,
-        maxKills = 50,
-        color = {r = 192, g = 192, b = 192, a = 200}
-    },
-    {
-        name = "Gold",
-        label = "🥇 Gold (51-200 kills)",
-        minKills = 51,
-        maxKills = 200,
-        color = {r = 255, g = 215, b = 0, a = 200}
-    },
-    {
-        name = "Diamond",
-        label = "💎 Diamond (200+ kills)",
-        minKills = 201,
-        maxKills = 99999,
-        color = {r = 100, g = 200, b = 255, a = 200}
-    }
+-- Chaque partie GunGame crée une instance isolée pour ses joueurs
+Config.InstanceSystem = {
+    enabled = true,
+    maxPlayersPerInstance = 16,
+    autoCreateInstance = true -- Crée une nouvelle instance si aucune disponible
 }
 
 -- ============================================================================
--- LOBBYS CONFIGURATION
+-- MAPS GUNGAME
 -- ============================================================================
-Config.Lobbys = {
-    ["bronze"] = {
-        name = "Bronze",
-        label = "🥉 Lobby Bronze (Débutants)",
-        bracket = "Bronze",
-        maxPlayers = 8,
+Config.Maps = {
+    ["downtown"] = {
+        name = "Downtown",
+        label = "🏙️ Downtown Arena",
         spawnPoint = {
             x = 400.5,
             y = -980.3,
@@ -57,23 +31,11 @@ Config.Lobbys = {
             y = -1010.0,
             z = 29.4,
             radius = 80.0
-        },
-        weapons = {
-            "WEAPON_SNSPISTOL",
-            "WEAPON_PISTOL",
-            "WEAPON_COMBATPISTOL",
-            "WEAPON_MICROSMG",
-            "WEAPON_SMG",
-            "WEAPON_ASSAULTRIFLE",
-            "WEAPON_CARBINERIFLE",
-            "WEAPON_HEAVYSNIPER"
         }
     },
-    ["silver"] = {
-        name = "Silver",
-        label = "🥈 Lobby Silver (Intermédiaire)",
-        bracket = "Silver",
-        maxPlayers = 8,
+    ["warehouse"] = {
+        name = "Warehouse",
+        label = "🏭 Warehouse Battle",
         spawnPoint = {
             x = 200.5,
             y = -850.3,
@@ -85,24 +47,11 @@ Config.Lobbys = {
             y = -880.0,
             z = 31.0,
             radius = 100.0
-        },
-        weapons = {
-            "WEAPON_MICROSMG",
-            "WEAPON_SMG",
-            "WEAPON_MINISMG",
-            "WEAPON_ASSAULTRIFLE",
-            "WEAPON_CARBINERIFLE",
-            "WEAPON_ADVANCEDRIFLE",
-            "WEAPON_SPECIALCARBINE",
-            "WEAPON_BULLPUPRIFLE",
-            "WEAPON_HEAVYSNIPER"
         }
     },
-    ["gold"] = {
-        name = "Gold",
-        label = "🥇 Lobby Gold (Avancé)",
-        bracket = "Gold",
-        maxPlayers = 10,
+    ["beach"] = {
+        name = "Beach",
+        label = "🏖️ Beach Combat",
         spawnPoint = {
             x = 700.5,
             y = 100.3,
@@ -114,25 +63,11 @@ Config.Lobbys = {
             y = 130.0,
             z = 87.0,
             radius = 120.0
-        },
-        weapons = {
-            "WEAPON_ASSAULTRIFLE",
-            "WEAPON_CARBINERIFLE",
-            "WEAPON_ADVANCEDRIFLE",
-            "WEAPON_SPECIALCARBINE",
-            "WEAPON_BULLPUPRIFLE",
-            "WEAPON_COMPACTRIFLE",
-            "WEAPON_ASSAULTSHOTGUN",
-            "WEAPON_HEAVYSNIPER",
-            "WEAPON_SNIPERRIFLE",
-            "WEAPON_MINIGUN"
         }
     },
-    ["diamond"] = {
-        name = "Diamond",
-        label = "💎 Lobby Diamond (Pro)",
-        bracket = "Diamond",
-        maxPlayers = 12,
+    ["industrial"] = {
+        name = "Industrial",
+        label = "⚙️ Industrial Zone",
         spawnPoint = {
             x = 1000.5,
             y = 500.3,
@@ -144,31 +79,70 @@ Config.Lobbys = {
             y = 530.0,
             z = 100.0,
             radius = 150.0
+        }
+    },
+    ["rooftop"] = {
+        name = "Rooftop",
+        label = "🌃 Rooftop Paradise",
+        spawnPoint = {
+            x = 300.5,
+            y = 200.3,
+            z = 150.0,
+            heading = 45.0
         },
-        weapons = {
-            "WEAPON_CARBINERIFLE",
-            "WEAPON_ADVANCEDRIFLE",
-            "WEAPON_SPECIALCARBINE",
-            "WEAPON_BULLPUPRIFLE",
-            "WEAPON_COMPACTRIFLE",
-            "WEAPON_MILITARYRIFLE",
-            "WEAPON_HEAVYSNIPER",
-            "WEAPON_SNIPERRIFLE",
-            "WEAPON_COMBATMG",
-            "WEAPON_GUSENBERG",
-            "WEAPON_MINIGUN",
-            "WEAPON_FLAMETHROWER"
+        battleZone = {
+            x = 320.0,
+            y = 220.0,
+            z = 150.0,
+            radius = 90.0
+        }
+    },
+    ["forest"] = {
+        name = "Forest",
+        label = "🌲 Forest Arena",
+        spawnPoint = {
+            x = -500.5,
+            y = 600.3,
+            z = 50.0,
+            heading = 270.0
+        },
+        battleZone = {
+            x = -480.0,
+            y = 630.0,
+            z = 50.0,
+            radius = 110.0
         }
     }
+}
+
+-- ============================================================================
+-- PROGRESSION DES ARMES
+-- ============================================================================
+Config.Weapons = {
+    "WEAPON_SNSPISTOL",
+    "WEAPON_PISTOL",
+    "WEAPON_COMBATPISTOL",
+    "WEAPON_MICROSMG",
+    "WEAPON_SMG",
+    "WEAPON_MINISMG",
+    "WEAPON_ASSAULTRIFLE",
+    "WEAPON_CARBINERIFLE",
+    "WEAPON_ADVANCEDRIFLE",
+    "WEAPON_SPECIALCARBINE",
+    "WEAPON_BULLPUPRIFLE",
+    "WEAPON_COMPACTRIFLE",
+    "WEAPON_ASSAULTSHOTGUN",
+    "WEAPON_HEAVYSNIPER",
+    "WEAPON_SNIPERRIFLE",
+    "WEAPON_COMBATMG"
 }
 
 -- ============================================================================
 -- CONFIGURATION DU GUNGAME
 -- ============================================================================
 Config.GunGame = {
-    -- Nombre de kills pour gagner (doit correspondre au nombre d'armes)
-    killsToWin = 16, -- Pour Bronze et Silver
-    killsToWinAdvanced = 32, -- Pour Gold et Diamond
+    -- Nombre de kills pour gagner (= nombre d'armes)
+    killsToWin = #Config.Weapons,
     
     -- Délai avant respawn après mort (en ms)
     respawnDelay = 2000,
@@ -180,11 +154,13 @@ Config.GunGame = {
     -- Notification de progression
     notifyOnKill = true,
     notifyOnDeath = true,
-    notifyInterval = 500
+    
+    -- Récompense par arme complétée
+    rewardPerWeapon = 250
 }
 
 -- ============================================================================
--- SYSTÈME DE PERSISTANCE (Kills globaux)
+-- SYSTÈME DE PERSISTANCE (Stats globales)
 -- ============================================================================
 Config.PersistenceType = "mysql" -- "mysql" ou "json"
 Config.DatabaseName = "gungame_players" -- Table MySQL
@@ -203,14 +179,13 @@ Config.HUD = {
 -- MESSAGES & LOCALIZATION
 -- ============================================================================
 Config.Messages = {
-    joinLobby = "Vous avez rejoint le lobby ~b~%s~s~",
+    joinGame = "Vous avez rejoint une partie GunGame",
     nextWeapon = "Kill ! Arme suivante : ~g~%s~s~",
-    lastWeapon = "Dernière arme ! ~r~%d~s~ kills manquants",
+    lastWeapon = "Dernière arme ! ~r~1~s~ kill manquant",
     winner = "~r~🏆 %s~s~ a remporté la partie !",
-    lobbyFull = "Le lobby est complet (~r~%d/%d~s~)",
-    lobbyStarting = "La partie commence dans ~b~10~s~ secondes...",
+    gameFull = "La partie est complète (~r~%d/%d~s~)",
     playerEliminated = "~r~%s~s~ a été éliminé par ~g~%s",
-    bracketTooHigh = "Vous n'avez pas le niveau pour ce lobby"
+    mapSelected = "Map sélectionnée: ~b~%s"
 }
 
 -- ============================================================================
@@ -229,14 +204,10 @@ Config.WeaponAmmo = {
     ["WEAPON_SPECIALCARBINE"] = 300,
     ["WEAPON_BULLPUPRIFLE"] = 300,
     ["WEAPON_COMPACTRIFLE"] = 250,
-    ["WEAPON_MILITARYRIFLE"] = 250,
+    ["WEAPON_ASSAULTSHOTGUN"] = 150,
     ["WEAPON_HEAVYSNIPER"] = 60,
     ["WEAPON_SNIPERRIFLE"] = 60,
-    ["WEAPON_ASSAULTSHOTGUN"] = 150,
-    ["WEAPON_COMBATMG"] = 300,
-    ["WEAPON_GUSENBERG"] = 250,
-    ["WEAPON_MINIGUN"] = 500,
-    ["WEAPON_FLAMETHROWER"] = 150
+    ["WEAPON_COMBATMG"] = 300
 }
 
 -- ============================================================================
@@ -250,11 +221,6 @@ Config.Commands = {
     leaveGame = {
         name = "leavegame",
         description = "Quitter la partie actuelle"
-    },
-    adminMenu = {
-        name = "gungameadmin",
-        description = "Menu administrateur GunGame",
-        requiredJob = "admin"
     }
 }
 
@@ -263,5 +229,5 @@ Config.Commands = {
 -- ============================================================================
 if Config.Debug then
     Config.DebugZones = true -- Affiche les zones de combat
-    Config.AutoJoinLobby = "bronze" -- Auto-join au démarrage (dev)
+    Config.AutoJoinGame = "downtown" -- Auto-join au démarrage (dev)
 end
