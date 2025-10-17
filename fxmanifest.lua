@@ -4,6 +4,7 @@ game 'gta5'
 author 'Hoka'
 description 'GunGame avec système d\'instance et rotation de spawns multiples.'
 version '1.1.0'
+lua54 'yes'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -12,12 +13,11 @@ shared_scripts {
 }
 
 client_scripts {
-    'client/client.lua'
+    "client/*.lua"
 }
 
 server_scripts {
-    'server/spawn_system.lua',
-    'server/server.lua'
+    "server/*.lua"
 }
 
 dependencies {
@@ -25,5 +25,3 @@ dependencies {
     'es_extended',
     'ox_inventory'
 }
-
-lua54 'yes'

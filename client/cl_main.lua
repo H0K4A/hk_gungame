@@ -45,14 +45,18 @@ end)
 -- COMMANDES
 -- ============================================================================
 
-RegisterCommand('gungame', function()
+RegisterCommand('gungame', function(source, args, rawCommand)
     print("^2[GunGame Client]^7 Commande /gungame exécutée")
     TriggerEvent('gungame:openMenu')
 end, false)
 
-TriggerEvent('chat:addSuggestion', '/gungame', 'Ouvrir le menu GunGame', {})
+-- Attendre que le système de chat soit prêt avant d'ajouter les suggestions
+Citizen.CreateThread(function()
+    Wait(1000)
+    TriggerEvent('chat:addSuggestion', '/gungame', 'Ouvrir le menu GunGame', {})
+end)
 
-RegisterCommand('leavegame', function()
+RegisterCommand('leavegame', function(source, args, rawCommand)
     if playerData.inGame then
         local ped = PlayerPedId()
         local lastSpawn = playerData.lastSpawnPoint
@@ -89,9 +93,12 @@ RegisterCommand('leavegame', function()
     end
 end, false)
 
-TriggerEvent('chat:addSuggestion', '/leavegame', 'Quitter la partie GunGame', {})
+Citizen.CreateThread(function()
+    Wait(1000)
+    TriggerEvent('chat:addSuggestion', '/leavegame', 'Quitter la partie GunGame', {})
+end)
 
-RegisterCommand('togglehud', function()
+RegisterCommand('togglehud', function(source, args, rawCommand)
     hudVisible = not hudVisible
     
     if hudVisible then
@@ -110,9 +117,12 @@ RegisterCommand('togglehud', function()
     end
 end, false)
 
-TriggerEvent('chat:addSuggestion', '/togglehud', 'Affiche/Masque le HUD', {})
+Citizen.CreateThread(function()
+    Wait(1000)
+    TriggerEvent('chat:addSuggestion', '/togglehud', 'Affiche/Masque le HUD', {})
+end)
 
-RegisterCommand('mystats', function()
+RegisterCommand('mystats', function(source, args, rawCommand)
     if not playerData.inGame then
         lib.notify({
             title = 'Erreur',
@@ -138,7 +148,10 @@ RegisterCommand('mystats', function()
     })
 end, false)
 
-TriggerEvent('chat:addSuggestion', '/mystats', 'Voir vos statistiques GunGame', {})
+Citizen.CreateThread(function()
+    Wait(1000)
+    TriggerEvent('chat:addSuggestion', '/mystats', 'Voir vos statistiques GunGame', {})
+end)
 
 -- ============================================================================
 -- MENU PRINCIPAL
