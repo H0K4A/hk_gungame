@@ -1,7 +1,7 @@
 Config = {}
 
 -- Activer/Désactiver le mode debug
-Config.Debug = false.
+Config.Debug = false
 
 -- ============================================================================
 -- SYSTÈME D'INSTANCES - GUNGAME UNIQUE
