@@ -259,12 +259,8 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
     if winnerName == GetPlayerName(PlayerId()) then
         lib.notify({
             title = '💰 Récompense',
-<<<<<<< HEAD
             description = 'Vous avez gagné'
 -- ============================================================================
-=======
-            description = 'Vous avez gagné ============================================================================
->>>>>>> 58c87a1567ec2ac66310b62b32e2f2204737839a
 -- GUNGAME CLIENT - Interface & Gameplay
 -- ============================================================================
 
