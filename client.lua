@@ -21,7 +21,7 @@ RegisterCommand('togglehud', function()
     end
 end, false)
 
-TriggerEvent('chat:addSuggestion', '/togglehud', 'Affiche/Masque le HUD', {})
+TriggerEvent('chat:addSuggestion', '/togglehud', 'Affiche/Masque le HUD', {}).
 
 Citizen.CreateThread(function()
     while true do

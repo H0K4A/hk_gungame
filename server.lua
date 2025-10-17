@@ -2,7 +2,7 @@
 -- GUNGAME SERVER - Backend Principal avec Instances
 -- ============================================================================
 
-local ESX = exports["es_extended"]:getSharedObject()
+local ESX = exports["es_extended"]:getSharedObject().
 
 -- Tables globales
 local instances = {} -- {[instanceId] = {id, map, players, gameActive, playersData}}

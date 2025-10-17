@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Hoka'
 description 'GunGame avec système d\'instance.'
-version '1.0.3'
+version '1.0.4'
 
 shared_scripts {
     '@ox_lib/init.lua',
