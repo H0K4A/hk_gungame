@@ -9,7 +9,7 @@ Config.Debug = false
 -- Chaque partie GunGame crée une instance isolée pour ses joueurs
 Config.InstanceSystem = {
     enabled = true,
-    maxPlayersPerInstance = 16,
+    maxPlayersPerInstance = 20,
     autoCreateInstance = true -- Crée une nouvelle instance si aucune disponible
 }
 
@@ -228,6 +228,6 @@ Config.Commands = {
 -- DÉVELOPPEMENT & DEBUG
 -- ============================================================================
 if Config.Debug then
-    Config.DebugZones = true -- Affiche les zones de combat
+    Config.DebugZones = false -- Affiche les zones de combat
     Config.AutoJoinGame = "downtown" -- Auto-join au démarrage (dev)
 end

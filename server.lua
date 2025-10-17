@@ -330,11 +330,11 @@ function respawnPlayerInInstance(source, instanceId)
     TriggerClientEvent('gungame:respawnPlayer', source, instanceId, mapId)
     
     -- Redonner l'arme
-    SetTimeout(500, function()
-        if playerData[source] and playerData[source].instanceId == instanceId then
-            giveWeaponToPlayer(source, currentWeapon, instanceId, false)
-        end
-    end)
+    --SetTimeout(500, function()
+    --    if playerData[source] and playerData[source].instanceId == instanceId then
+    --        giveWeaponToPlayer(source, currentWeapon, instanceId, false)
+    --    end
+    --end)
 end
 
 -- ============================================================================
@@ -419,15 +419,15 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
             type = 'success',
             duration = 2000
         })
-    else
-        print("^1[GunGame Server]^7 Échec de l'ajout de l'arme " .. weaponName)
+    --else
+        --print("^1[GunGame Server]^7 Échec de l'ajout de l'arme " .. weaponName)
         
         -- Réessayer
-        SetTimeout(500, function()
-            if playerData[source] and playerData[source].instanceId == instanceId then
-                giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
-            end
-        end)
+        --SetTimeout(500, function()
+        --    if playerData[source] and playerData[source].instanceId == instanceId then
+        --        giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
+            --end
+        --end)
     end
 end
 
