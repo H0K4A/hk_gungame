@@ -1,5 +1,5 @@
 -- ============================================================================
--- GUNGAME CLIENT - Interface & Gameplay
+-- GUNGAME CLIENT - Interface & Gameplay (VERSION SPAWNS MULTIPLES)
 -- ============================================================================
 
 local playerData = {
@@ -263,12 +263,11 @@ AddEventHandler('gungame:clearAllInventory', function()
 end)
 
 -- ============================================================================
--- TÉLÉPORTATION AU JEU
+-- TÉLÉPORTATION AU JEU - VERSION AVEC SPAWN PERSONNALISÉ
 -- ============================================================================
 
 RegisterNetEvent('gungame:teleportToGame')
-AddEventHandler('gungame:teleportToGame', function(instanceId, mapId)
-    local spawn = Config.Maps[mapId].spawnPoint
+AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     local ped = PlayerPedId()
     
     playerData.lastSpawnPoint = GetEntityCoords(ped)
@@ -279,8 +278,16 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId)
     playerData.kills = 0
     playerData.currentWeaponIndex = 1
     
-    SetEntityCoords(ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
-    SetEntityHeading(ped, spawn.heading)
+    -- Utiliser le spawn fourni par le serveur, sinon fallback sur le premier spawn
+    local spawnPoint = spawn or Config.Maps[mapId].spawnPoints[1]
+    
+    if not spawnPoint then
+        print("^1[GunGame Client]^7 ERREUR: Aucun spawn disponible pour " .. mapId)
+        return
+    end
+    
+    SetEntityCoords(ped, spawnPoint.x, spawnPoint.y, spawnPoint.z, false, false, false, false)
+    SetEntityHeading(ped, spawnPoint.heading)
     
     Wait(500)
     
@@ -294,27 +301,39 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId)
     })
     
     if Config.Debug then
-        print("^2[GunGame Client]^7 Téléportation vers " .. mapId .. " effectuée")
+        print(string.format("^2[GunGame Client]^7 Téléportation vers %s (%.2f, %.2f, %.2f)", 
+            mapId, spawnPoint.x, spawnPoint.y, spawnPoint.z))
     end
 end)
 
 -- ============================================================================
--- RESPAWN
+-- RESPAWN - VERSION AVEC SPAWN PERSONNALISÉ
 -- ============================================================================
 
 RegisterNetEvent('gungame:respawnPlayer')
-AddEventHandler('gungame:respawnPlayer', function(instanceId, mapId)
-    local spawn = Config.Maps[mapId].spawnPoint
+AddEventHandler('gungame:respawnPlayer', function(instanceId, mapId, spawn)
     local ped = PlayerPedId()
     
-    SetEntityCoords(ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
-    SetEntityHeading(ped, spawn.heading)
+    -- Utiliser le spawn fourni par le serveur, sinon fallback
+    local spawnPoint = spawn
+    if not spawnPoint then
+        local spawnPoints = Config.Maps[mapId].spawnPoints
+        spawnPoint = spawnPoints[math.random(1, #spawnPoints)]
+    end
+    
+    if not spawnPoint then
+        print("^1[GunGame Client]^7 ERREUR: Aucun spawn disponible pour le respawn")
+        return
+    end
+    
+    SetEntityCoords(ped, spawnPoint.x, spawnPoint.y, spawnPoint.z, false, false, false, false)
+    SetEntityHeading(ped, spawnPoint.heading)
 
-     -- Revive le joueur
-    NetworkResurrectLocalPlayer(spawn.x, spawn.y, spawn.z, spawn.w or 0.0, true, true, false)
-    SetEntityHealth(playerPed, 200)
-    ClearPedBloodDamage(playerPed)
-    ClearPedTasksImmediately(playerPed)
+    -- Revive le joueur
+    NetworkResurrectLocalPlayer(spawnPoint.x, spawnPoint.y, spawnPoint.z, spawnPoint.heading or 0.0, true, true, false)
+    SetEntityHealth(ped, 200)
+    ClearPedBloodDamage(ped)
+    ClearPedTasksImmediately(ped)
     
     enableGodMode()
 
@@ -326,6 +345,11 @@ AddEventHandler('gungame:respawnPlayer', function(instanceId, mapId)
         type = 'inform',
         duration = 2000
     })
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame Client]^7 Respawn à (%.2f, %.2f, %.2f)", 
+            spawnPoint.x, spawnPoint.y, spawnPoint.z))
+    end
 end)
 
 -- ============================================================================

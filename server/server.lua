@@ -1,8 +1,11 @@
 -- ============================================================================
--- GUNGAME SERVER - Backend Principal avec Instances
+-- GUNGAME SERVER - Backend Principal avec Instances et SpawnSystem
 -- ============================================================================
 
 local ESX = exports["es_extended"]:getSharedObject()
+
+-- Charger le système de spawns (à ajouter en haut du fichier)
+-- NOTE: Le fichier spawn_system.lua doit être chargé AVANT server.lua dans fxmanifest.lua
 
 -- Tables globales
 local instances = {} -- {[instanceId] = {id, map, players, gameActive, playersData}}
@@ -18,6 +21,7 @@ AddEventHandler('onServerResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     
     print("^2[GunGame]^7 Script démarré avec succès")
+    print("^2[GunGame]^7 SpawnSystem chargé: " .. (SpawnSystem and "OUI" or "NON"))
     loadPlayerStatistics()
 end)
 
@@ -30,6 +34,11 @@ AddEventHandler('playerDropped', function(reason)
     
     if playerData[source] then
         local instanceId = playerData[source].instanceId
+        
+        -- Libérer le spawn occupé
+        if SpawnSystem then
+            SpawnSystem.FreeSpawn(instanceId, source)
+        end
         
         if instances[instanceId] then
             removePlayerFromInstance(source, instanceId)
@@ -74,7 +83,7 @@ RegisterCommand(Config.Commands.leaveGame.name, function(source, args, rawComman
 end, false)
 
 -- ============================================================================
--- REJOINDRE UNE INSTANCE - VERSION CORRIGÉE
+-- REJOINDRE UNE INSTANCE - VERSION AVEC SPAWNYSTEM
 -- ============================================================================
 
 RegisterNetEvent('gungame:joinGame')
@@ -158,8 +167,23 @@ AddEventHandler('gungame:joinGame', function(mapId)
     instance.currentPlayers = instance.currentPlayers + 1
     instance.gameActive = true
     
-    -- Téléporter le joueur
-    TriggerClientEvent('gungame:teleportToGame', source, instance.id, mapId)
+    -- Obtenir un spawn via le SpawnSystem
+    local spawn = nil
+    if SpawnSystem then
+        spawn = SpawnSystem.GetSpawnForPlayer(instance.id, mapId, source)
+    else
+        -- Fallback sur le premier spawn si SpawnSystem n'est pas disponible
+        spawn = Config.Maps[mapId].spawnPoints[1]
+        print("^1[GunGame]^7 ATTENTION: SpawnSystem non disponible, utilisation du spawn par défaut")
+    end
+    
+    if not spawn then
+        print("^1[GunGame]^7 ERREUR: Aucun spawn disponible pour " .. mapId)
+        return
+    end
+    
+    -- Téléporter le joueur avec le spawn sélectionné
+    TriggerClientEvent('gungame:teleportToGame', source, instance.id, mapId, spawn)
     
     if Config.Debug then
         print("^3[GunGame]^7 Teleportation envoyée à " .. xPlayer.getName())
@@ -304,6 +328,11 @@ AddEventHandler('gungame:playerDeath', function()
     
     if not instance or not instance.gameActive then return end
     
+    -- Libérer le spawn précédent
+    if SpawnSystem then
+        SpawnSystem.FreeSpawn(instanceId, source)
+    end
+    
     -- Respawn après le délai
     SetTimeout(Config.GunGame.respawnDelay, function()
         if playerData[source] and playerData[source].instanceId == instanceId then
@@ -323,18 +352,25 @@ function respawnPlayerInInstance(source, instanceId)
     
     if currentWeaponIndex > #weaponsList then return end
     
-    local currentWeapon = weaponsList[currentWeaponIndex]
     local mapId = instance.map
     
-    -- Téléporter le joueur
-    TriggerClientEvent('gungame:respawnPlayer', source, instanceId, mapId)
+    -- Obtenir un nouveau spawn
+    local spawn = nil
+    if SpawnSystem then
+        spawn = SpawnSystem.GetSpawnForPlayer(instanceId, mapId, source)
+    else
+        -- Fallback
+        local spawnPoints = Config.Maps[mapId].spawnPoints
+        spawn = spawnPoints[math.random(1, #spawnPoints)]
+    end
     
-    -- Redonner l'arme
-    --SetTimeout(500, function()
-    --    if playerData[source] and playerData[source].instanceId == instanceId then
-    --        giveWeaponToPlayer(source, currentWeapon, instanceId, false)
-    --    end
-    --end)
+    if not spawn then
+        print("^1[GunGame]^7 ERREUR: Aucun spawn disponible pour le respawn")
+        return
+    end
+    
+    -- Téléporter le joueur avec le nouveau spawn
+    TriggerClientEvent('gungame:respawnPlayer', source, instanceId, mapId, spawn)
 end
 
 -- ============================================================================
@@ -360,6 +396,11 @@ function winnerDetected(source, instanceId)
     for _, playerId in ipairs(instance.players) do
         if playerData[playerId] then
             TriggerClientEvent('gungame:playerWon', playerId, xPlayer.getName(), reward)
+            
+            -- Libérer le spawn
+            if SpawnSystem then
+                SpawnSystem.FreeSpawn(instanceId, playerId)
+            end
             
             -- Restaurer l'inventaire
             if playerInventories[playerId] then
@@ -419,15 +460,6 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
             type = 'success',
             duration = 2000
         })
-    --else
-        --print("^1[GunGame Server]^7 Échec de l'ajout de l'arme " .. weaponName)
-        
-        -- Réessayer
-        --SetTimeout(500, function()
-        --    if playerData[source] and playerData[source].instanceId == instanceId then
-        --        giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
-            --end
-        --end)
     end
 end
 
@@ -442,6 +474,11 @@ AddEventHandler('gungame:leaveGame', function()
     if not playerData[source] then return end
     
     local instanceId = playerData[source].instanceId
+    
+    -- Libérer le spawn
+    if SpawnSystem then
+        SpawnSystem.FreeSpawn(instanceId, source)
+    end
     
     -- Restaurer l'inventaire
     if playerInventories[source] then
@@ -462,6 +499,11 @@ function removePlayerFromInstance(source, instanceId)
     if not instances[instanceId] then return end
     
     local instance = instances[instanceId]
+    
+    -- Libérer le spawn
+    if SpawnSystem then
+        SpawnSystem.FreeSpawn(instanceId, source)
+    end
     
     -- Retirer de la liste
     for i, playerId in ipairs(instance.players) do
@@ -511,6 +553,11 @@ function resetInstance(instanceId)
     instance.playersData = {}
     instance.players = {}
     instance.currentPlayers = 0
+    
+    -- Réinitialiser le système de spawns pour cette instance
+    if SpawnSystem then
+        SpawnSystem.ResetInstance(instanceId)
+    end
 end
 
 -- ============================================================================
@@ -587,6 +634,50 @@ lib.callback.register('gungame:getAvailableGames', function(source)
 end)
 
 -- ============================================================================
+-- COMMANDES ADMIN / DEBUG
+-- ============================================================================
+
+if Config.Debug then
+    RegisterCommand('gg_stats', function(source, args, rawCommand)
+        if source == 0 then -- Console seulement
+            print("^2[GunGame]^7 ===== STATISTIQUES DES INSTANCES =====")
+            
+            for instanceId, instance in pairs(instances) do
+                print(string.format("^3Instance %d^7: Map=%s, Joueurs=%d/%d, Active=%s", 
+                    instanceId, 
+                    instance.map, 
+                    instance.currentPlayers, 
+                    Config.InstanceSystem.maxPlayersPerInstance,
+                    instance.gameActive and "OUI" or "NON"
+                ))
+                
+                if SpawnSystem then
+                    local stats = SpawnSystem.GetStats(instanceId)
+                    print(string.format("  Spawns occupés: %d, Index actuel: %d", 
+                        stats.occupiedCount, 
+                        stats.currentIndex
+                    ))
+                end
+            end
+            
+            print("^2[GunGame]^7 =====================================")
+        end
+    end, true)
+    
+    RegisterCommand('gg_resetinstance', function(source, args, rawCommand)
+        if source == 0 then -- Console seulement
+            local instanceId = tonumber(args[1])
+            if instanceId and instances[instanceId] then
+                resetInstance(instanceId)
+                print("^2[GunGame]^7 Instance " .. instanceId .. " réinitialisée")
+            else
+                print("^1[GunGame]^7 Instance invalide")
+            end
+        end
+    end, true)
+end
+
+-- ============================================================================
 -- NETTOYAGE AUTOMATIQUE
 -- ============================================================================
 
@@ -620,4 +711,11 @@ end)
 
 exports('getActiveInstances', function()
     return instances
+end)
+
+exports('getSpawnSystemStats', function(instanceId)
+    if SpawnSystem then
+        return SpawnSystem.GetStats(instanceId)
+    end
+    return nil
 end)

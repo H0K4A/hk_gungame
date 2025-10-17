@@ -2,8 +2,8 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'Hoka'
-description 'GunGame avec système d\'instance.'
-version '1.0.3'
+description 'GunGame avec système d\'instance et rotation de spawns multiples.'
+version '1.1.0'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -12,11 +12,12 @@ shared_scripts {
 }
 
 client_scripts {
-    'client.lua'
+    'client/client.lua'
 }
 
 server_scripts {
-    'server.lua'
+    'server/spawn_system.lua',
+    'server/server.lua'
 }
 
 dependencies {
