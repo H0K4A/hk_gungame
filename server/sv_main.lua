@@ -1,11 +1,8 @@
 -- ============================================================================
--- GUNGAME SERVER - Backend Principal avec Instances et SpawnSystem
+-- GUNGAME SERVER - Backend Principal avec Instances et SpawnSystem (CORRIGÉ)
 -- ============================================================================
 
 local ESX = exports["es_extended"]:getSharedObject()
-
--- Charger le système de spawns (à ajouter en haut du fichier)
--- NOTE: Le fichier spawn_system.lua doit être chargé AVANT server.lua dans fxmanifest.lua
 
 -- Tables globales
 local instances = {} -- {[instanceId] = {id, map, players, gameActive, playersData}}
@@ -182,6 +179,11 @@ AddEventHandler('gungame:joinGame', function(mapId)
         return
     end
     
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Joueur %s rejoint instance %d (map: %s)", 
+            xPlayer.getName(), instance.id, mapId))
+    end
+    
     -- Téléporter le joueur avec le spawn sélectionné
     TriggerClientEvent('gungame:teleportToGame', source, instance.id, mapId, spawn)
     
@@ -314,19 +316,43 @@ AddEventHandler('gungame:playerKill', function(targetSource)
 end)
 
 -- ============================================================================
--- GESTION DES MORTS
+-- GESTION DES MORTS - VERSION CORRIGÉE
 -- ============================================================================
 
 RegisterNetEvent('gungame:playerDeath')
 AddEventHandler('gungame:playerDeath', function()
     local source = source
     
-    if not playerData[source] then return end
+    if not playerData[source] then 
+        print("^1[GunGame]^7 ERREUR: playerData n'existe pas pour " .. source)
+        return 
+    end
     
     local instanceId = playerData[source].instanceId
+    
+    if not instanceId then
+        print("^1[GunGame]^7 ERREUR: Joueur " .. source .. " n'a pas d'instanceId")
+        return
+    end
+    
     local instance = instances[instanceId]
     
-    if not instance or not instance.gameActive then return end
+    if not instance then
+        print("^1[GunGame]^7 ERREUR: Instance " .. instanceId .. " n'existe pas")
+        -- Nettoyer les données du joueur
+        playerData[source] = nil
+        return
+    end
+    
+    if not instance.gameActive then 
+        print("^1[GunGame]^7 ERREUR: Instance " .. instanceId .. " n'est pas active")
+        return 
+    end
+    
+    if Config.Debug then
+        print(string.format("^3[GunGame]^7 Joueur %d mort dans instance %d (map: %s)", 
+            source, instanceId, instance.map))
+    end
     
     -- Libérer le spawn précédent
     if SpawnSystem then
@@ -335,18 +361,43 @@ AddEventHandler('gungame:playerDeath', function()
     
     -- Respawn après le délai
     SetTimeout(Config.GunGame.respawnDelay, function()
+        -- Re-vérifier que le joueur est toujours dans l'instance
         if playerData[source] and playerData[source].instanceId == instanceId then
             respawnPlayerInInstance(source, instanceId)
+        else
+            print("^3[GunGame]^7 Joueur " .. source .. " n'est plus dans l'instance au moment du respawn")
         end
     end)
 end)
 
 -- ============================================================================
--- FONCTION : RESPAWN DU JOUEUR
+-- FONCTION : RESPAWN DU JOUEUR - VERSION CORRIGÉE
 -- ============================================================================
 
 function respawnPlayerInInstance(source, instanceId)
+    -- Vérifications de sécurité
+    if not instances[instanceId] then
+        print("^1[GunGame]^7 ERREUR: Instance " .. instanceId .. " n'existe pas")
+        return
+    end
+    
+    if not playerData[source] then
+        print("^1[GunGame]^7 ERREUR: Joueur " .. source .. " n'a pas de données")
+        return
+    end
+    
+    if playerData[source].instanceId ~= instanceId then
+        print("^1[GunGame]^7 ERREUR: Joueur " .. source .. " n'est pas dans l'instance " .. instanceId)
+        return
+    end
+    
     local instance = instances[instanceId]
+    
+    if not instance.gameActive then
+        print("^1[GunGame]^7 ERREUR: Instance " .. instanceId .. " n'est pas active")
+        return
+    end
+    
     local currentWeaponIndex = playerData[source].currentWeapon
     local weaponsList = Config.Weapons
     
@@ -369,6 +420,12 @@ function respawnPlayerInInstance(source, instanceId)
         return
     end
     
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Respawn du joueur %d dans instance %d (map: %s) à (%.2f, %.2f, %.2f)", 
+            source, instanceId, mapId, spawn.x, spawn.y, spawn.z))
+    end
+    
+    TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
     -- Téléporter le joueur avec le nouveau spawn
     TriggerClientEvent('gungame:respawnPlayer', source, instanceId, mapId, spawn)
 end

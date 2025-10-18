@@ -1,5 +1,5 @@
 -- ============================================================================
--- GUNGAME CLIENT - Interface & Gameplay (VERSION SPAWNS MULTIPLES)
+-- GUNGAME CLIENT - Interface & Gameplay (VERSION CORRIGÉE)
 -- ============================================================================
 
 local playerData = {
@@ -314,18 +314,38 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     })
     
     if Config.Debug then
-        print(string.format("^2[GunGame Client]^7 Téléportation vers %s (%.2f, %.2f, %.2f)", 
-            mapId, spawnPoint.x, spawnPoint.y, spawnPoint.z))
+        print(string.format("^2[GunGame Client]^7 Téléportation vers %s (Instance: %d) (%.2f, %.2f, %.2f)", 
+            mapId, instanceId, spawnPoint.x, spawnPoint.y, spawnPoint.z))
     end
 end)
 
 -- ============================================================================
--- RESPAWN - VERSION AVEC SPAWN PERSONNALISÉ
+-- RESPAWN - VERSION AVEC SPAWN PERSONNALISÉ ET VALIDATION
 -- ============================================================================
 
 RegisterNetEvent('gungame:respawnPlayer')
 AddEventHandler('gungame:respawnPlayer', function(instanceId, mapId, spawn)
     local ped = PlayerPedId()
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame Client]^7 Respawn reçu - Instance: %d, Map: %s, PlayerData.instanceId: %s, PlayerData.mapId: %s", 
+            instanceId, 
+            mapId, 
+            playerData.instanceId or "nil",
+            playerData.mapId or "nil"
+        ))
+    end
+    
+    -- Vérifier que c'est bien notre instance
+    if playerData.instanceId ~= instanceId or playerData.mapId ~= mapId then
+        print(string.format("^1[GunGame Client]^7 ERREUR: Respawn pour mauvaise instance! Attendu: %s/%s, Reçu: %s/%s", 
+            tostring(playerData.instanceId), 
+            tostring(playerData.mapId),
+            tostring(instanceId),
+            tostring(mapId)
+        ))
+        return
+    end
     
     -- Utiliser le spawn fourni par le serveur, sinon fallback
     local spawnPoint = spawn
@@ -360,8 +380,8 @@ AddEventHandler('gungame:respawnPlayer', function(instanceId, mapId, spawn)
     })
     
     if Config.Debug then
-        print(string.format("^2[GunGame Client]^7 Respawn à (%.2f, %.2f, %.2f)", 
-            spawnPoint.x, spawnPoint.y, spawnPoint.z))
+        print(string.format("^2[GunGame Client]^7 Respawn effectué à (%.2f, %.2f, %.2f) sur map %s (Instance: %d)", 
+            spawnPoint.x, spawnPoint.y, spawnPoint.z, mapId, instanceId))
     end
 end)
 
@@ -490,10 +510,12 @@ Citizen.CreateThread(function()
 end)
 
 -- ============================================================================
--- DÉTECTION DES MORTS
+-- DÉTECTION DES MORTS - VERSION CORRIGÉE
 -- ============================================================================
 
 Citizen.CreateThread(function()
+    local isDead = false
+    
     while true do
         Wait(100)
         
@@ -501,19 +523,25 @@ Citizen.CreateThread(function()
             local ped = PlayerPedId()
             local health = GetEntityHealth(ped)
             
-            if health <= 105 then
+            if health <= 105 and not isDead then
+                isDead = true
+                
                 TriggerServerEvent('gungame:playerDeath')
-                playerData.inGame = false
                 
                 lib.notify({
                     title = '💀 Mort',
-                    description = 'Vous avez été éliminé',
+                    description = 'Vous allez respawn...',
                     type = 'error',
                     duration = 3000
                 })
                 
-                Wait(2000)
+                -- Attendre avant de pouvoir mourir à nouveau
+                SetTimeout(5000, function()
+                    isDead = false
+                end)
             end
+        else
+            isDead = false
         end
     end
 end)

@@ -33,7 +33,7 @@ Config.Maps = {
             x = 83.261536,
             y = -1907.393432,
             z = 21.191894,
-            radius = 226.771652
+            radius = 150.0
         },
         spawnPoints = {
             {x = 56.254944, y = -1944.224122, z = 20.989746, heading = 311.811036},
@@ -66,7 +66,7 @@ Config.Maps = {
             x = 425.538452,
             y = -1524.131836,
             z = 29.279908,
-            radius = 303.307098
+            radius = 150.0
         },
         spawnPoints = {
             {x = 428.294494, y = -1508.255004, z = 29.279908, heading = 260.787414},
@@ -99,7 +99,7 @@ Config.Maps = {
             x = 4945.147460,
             y = -5222.716308,
             z = 2.488648,
-            radius = 141.732284
+            radius = 150.0
         },
         spawnPoints = {
             {x = 4918.483398, y = -5274.566894, z = 5.639526, heading = 314.645660},
@@ -132,7 +132,7 @@ Config.Maps = {
             x = 1432.470336,
             y = 1114.457154,
             z = 114.236572,
-            radius = 266.456696
+            radius = 150.0
         },
         spawnPoints = {
             {x = 1336.509888, y = 1133.894532, z = 110.226318, heading = 102.047248},
@@ -198,7 +198,7 @@ Config.Maps = {
             x = -1645.292358,
             y = 217.199996,
             z = 60.637330,
-            radius = 107.716538
+            radius = 150.0
         },
         spawnPoints = {
             {x = -1659.876954, y = 241.160446, z = 62.389770, heading = 257.952758},
@@ -231,7 +231,7 @@ Config.Maps = {
             x = 1337.248292,
             y = 4333.846192,
             z = 37.822754,
-            radius = 189.921264
+            radius = 150.0
         },
         spawnPoints = {
             {x = 1332.632934, y = 4325.419922, z = 38.075440, heading = 345.826782},
@@ -264,7 +264,7 @@ Config.Maps = {
             x = 298.958252,
             y = -199.898896,
             z = 61.564086,
-            radius = 147.401580
+            radius = 150.0
         },
         spawnPoints = {
             {x = 295.213196, y = -213.085708, z = 61.564086, heading = 221.102372},
@@ -288,6 +288,74 @@ Config.Maps = {
             {x = 292.127472, y = -133.397796, z = 69.534058, heading = 70.866142},
             {x = 323.670318, y = -185.789002, z = 57.334838, heading = 342.992126}
         }
+    },
+
+    ["grapeseed"] = {
+        name = "Grapeseed",
+        label = "🌾 Grapeseed",
+        battleZone = {
+            x = 1669.556030,
+            y = 4853.208984,
+            z = 42.052002,
+            radius = 147.401580
+        },
+        spawnPoints = {
+            {x = 2337.454834, y = 3120.764892, z = 48.202148, heading = 127.559052},
+            {x = 2342.241700, y = 3144.593506, z = 48.202148, heading = 192.755906},
+            {x = 2348.742920, y = 3118.377930, z = 48.202148, heading = 274.960632},
+            {x = 2377.450440, y = 3104.254882, z = 48.134766, heading = 53.858268},
+            {x = 2359.424072, y = 3148.984620, z = 48.202148, heading = 351.496064},
+            {x = 2379.956054, y = 3160.153808, z = 48.202148, heading = 311.811036},
+            {x = 2396.980224, y = 3141.586914, z = 48.151612, heading = 246.614166},
+            {x = 2425.081298, y = 3158.729736, z = 48.202148, heading = 215.433074},
+            {x = 2433.270264, y = 3136.958252, z = 48.421264, heading = 153.070878},
+            {x = 2433.507812, y = 3117.230712, z = 48.185302, heading = 167.244094},
+            {x = 2388.237304, y = 3127.107666, z = 48.151612, heading = 226.771652},
+            {x = 2404.298828, y = 3078.896728, z = 48.151612, heading = 263.622070},
+            {x = 2408.703370, y = 3031.344970, z = 48.151612, heading = 348.661408},
+            {x = 2383.450440, y = 3027.454834, z = 48.151612, heading = 25.511812},
+            {x = 2356.615478, y = 3032.690186, z = 48.151612, heading = 59.527558},
+            {x = 2336.281250, y = 3073.358154, z = 48.151612, heading = 274.960632},
+            {x = 2424.870362, y = 3053.657226, z = 48.151612, heading = 274.960632},
+            {x = 2335.714356, y = 3044.241700, z = 48.134766, heading = 297.637786},
+            {x = 2327.485596, y = 3058.826416, z = 48.117920, heading = 96.377944},
+            {x = 2413.318604, y = 3159.257080, z = 48.185302, heading = 221.102372},
+            {x = 2434.377930, y = 3110.742920, z = 48.134766, heading = 90.708656},
+        }
+    },
+
+    ["casse_avion"] = {
+        name = "Casse Avion",
+        label = "✈️ Casse Avion",
+        battleZone = {
+            x = 2377.476806,
+            y = 3106.971436,
+            z = 48.117920,
+            radius = 150.0
+        },
+        spawnPoints = {
+            {x = 2337.454834, y = 3120.764892, z = 48.202148, heading = 127.559052},
+            {x = 2342.241700, y = 3144.593506, z = 48.202148, heading = 192.755906},
+            {x = 2348.742920, y = 3118.377930, z = 48.202148, heading = 274.960632},
+            {x = 2377.450440, y = 3104.254882, z = 48.134766, heading = 53.858268},
+            {x = 2359.424072, y = 3148.984620, z = 48.202148, heading = 351.496064},
+            {x = 2379.956054, y = 3160.153808, z = 48.202148, heading = 311.811036},
+            {x = 2396.980224, y = 3141.586914, z = 48.151612, heading = 246.614166},
+            {x = 2425.081298, y = 3158.729736, z = 48.202148, heading = 215.433074},
+            {x = 2433.270264, y = 3136.958252, z = 48.421264, heading = 153.070878},
+            {x = 2433.507812, y = 3117.230712, z = 48.185302, heading = 167.244094},
+            {x = 2388.237304, y = 3127.107666, z = 48.151612, heading = 226.771652},
+            {x = 2404.298828, y = 3078.896728, z = 48.151612, heading = 263.622070},
+            {x = 2408.703370, y = 3031.344970, z = 48.151612, heading = 348.661408},
+            {x = 2383.450440, y = 3027.454834, z = 48.151612, heading = 25.511812},
+            {x = 2356.615478, y = 3032.690186, z = 48.151612, heading = 59.527558},
+            {x = 2336.281250, y = 3073.358154, z = 48.151612, heading = 274.960632},
+            {x = 2424.870362, y = 3053.657226, z = 48.151612, heading = 274.960632},
+            {x = 2335.714356, y = 3044.241700, z = 48.134766, heading = 297.637786},
+            {x = 2327.485596, y = 3058.826416, z = 48.117920, heading = 96.377944},
+            {x = 2413.318604, y = 3159.257080, z = 48.185302, heading = 221.102372},
+            {x = 2434.377930, y = 3110.742920, z = 48.134766, heading = 90.708656},
+        }
     }
 }
 
@@ -296,21 +364,25 @@ Config.Maps = {
 -- ============================================================================
 Config.Weapons = {
     "WEAPON_SNSPISTOL",
-    "WEAPON_PISTOL",
-    "WEAPON_COMBATPISTOL",
     "WEAPON_MICROSMG",
+    "WEAPON_SAWNOFFSHOTGUN",
+    "WEAPON_MACHINEPISTOL",
+    "WEAPON_COMBATMG",
+    "WEAPON_APPISTOL",
+    "WEAPON_DOUBLEACTION",
+    "WEAPON_GUSENBERG",
     "WEAPON_SMG",
+    "WEAPON_PISTOL",
+    "WEAPON_AR15",
+    "WEAPON_PUMPSHOTGUN",
+    "WEAPON_VINTAGEPISTOL",
+    "WEAPON_COMBATPDW",
+    "WEAPON_PISTOL50",
     "WEAPON_MINISMG",
-    "WEAPON_ASSAULTRIFLE",
-    "WEAPON_CARBINERIFLE",
-    "WEAPON_ADVANCEDRIFLE",
-    "WEAPON_SPECIALCARBINE",
-    "WEAPON_BULLPUPRIFLE",
-    "WEAPON_COMPACTRIFLE",
-    "WEAPON_ASSAULTSHOTGUN",
-    "WEAPON_HEAVYSNIPER",
     "WEAPON_SNIPERRIFLE",
-    "WEAPON_COMBATMG"
+    "WEAPON_COMPACTRIFLE",
+    "WEAPON_GADGETPISTOL",
+    "WEAPON_PENIS", 
 }
 
 -- ============================================================================
@@ -369,21 +441,25 @@ Config.Messages = {
 -- ============================================================================
 Config.WeaponAmmo = {
     ["WEAPON_SNSPISTOL"] = 500,
-    ["WEAPON_PISTOL"] = 500,
-    ["WEAPON_COMBATPISTOL"] = 500,
     ["WEAPON_MICROSMG"] = 500,
+    ["WEAPON_SAWNOFFSHOTGUN"] = 500,
+    ["WEAPON_MACHINEPISTOL"] = 500,
+    ["WEAPON_COMBATMG"] = 500,
+    ["WEAPON_APPISTOL"] = 500,
+    ["WEAPON_DOUBLEACTION"] = 500,
+    ["WEAPON_GUSENBERG"] = 500,
     ["WEAPON_SMG"] = 500,
+    ["WEAPON_PISTOL"] = 500,
+    ["WEAPON_AR15"] = 500,
+    ["WEAPON_PUMPSHOTGUN"] = 500,
+    ["WEAPON_VINTAGEPISTOL"] = 500,
+    ["WEAPON_COMBATPDW"] = 500,
+    ["WEAPON_PISTOL50"] = 500,
     ["WEAPON_MINISMG"] = 500,
-    ["WEAPON_ASSAULTRIFLE"] = 500,
-    ["WEAPON_CARBINERIFLE"] = 500,
-    ["WEAPON_ADVANCEDRIFLE"] = 500,
-    ["WEAPON_SPECIALCARBINE"] = 500,
-    ["WEAPON_BULLPUPRIFLE"] = 500,
-    ["WEAPON_COMPACTRIFLE"] = 500,
-    ["WEAPON_ASSAULTSHOTGUN"] = 500,
-    ["WEAPON_HEAVYSNIPER"] = 500,
     ["WEAPON_SNIPERRIFLE"] = 500,
-    ["WEAPON_COMBATMG"] = 500
+    ["WEAPON_COMPACTRIFLE"] = 500,
+    ["WEAPON_GADGETPISTOL"] = 500,
+    ["WEAPON_PENIS"] = 500
 }
 
 -- ============================================================================
