@@ -425,10 +425,34 @@ function respawnPlayerInInstance(source, instanceId)
             source, instanceId, mapId, spawn.x, spawn.y, spawn.z))
     end
     
+    -- ÉTAPE 1: Téléporter d'abord
+    TriggerClientEvent('gungame:teleportBeforeRevive', source, spawn)
+    
+    -- ÉTAPE 2: Attendre la téléportation (IMPORTANT!)
+    Wait(200)
+    
+    -- ÉTAPE 3: Revive avec LeM
     TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
-    -- Téléporter le joueur avec le nouveau spawn
-    TriggerClientEvent('gungame:respawnPlayer', source, instanceId, mapId, spawn)
+    
+    -- ÉTAPE 4: Attendre le revive
+    Wait(800)
+    
+    -- ÉTAPE 5: Activer le godmode
+    TriggerClientEvent('gungame:activateGodMode', source)
+    
+    -- ÉTAPE 6: Notifier le joueur
+    TriggerClientEvent('ox_lib:notify', source, {
+        title = 'Respawn',
+        description = 'Vous avez respawné',
+        type = 'inform',
+        duration = 2000
+    })
+    
+    if Config.Debug then
+        print("^2[GunGame]^7 Respawn complet pour le joueur " .. source)
+    end
 end
+
 
 -- ============================================================================
 -- FONCTION : GAGNANT

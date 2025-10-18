@@ -323,65 +323,27 @@ end)
 -- RESPAWN - VERSION AVEC SPAWN PERSONNALISÉ ET VALIDATION
 -- ============================================================================
 
-RegisterNetEvent('gungame:respawnPlayer')
-AddEventHandler('gungame:respawnPlayer', function(instanceId, mapId, spawn)
+RegisterNetEvent('gungame:teleportBeforeRevive')
+AddEventHandler('gungame:teleportBeforeRevive', function(spawn)
     local ped = PlayerPedId()
     
     if Config.Debug then
-        print(string.format("^2[GunGame Client]^7 Respawn reçu - Instance: %d, Map: %s, PlayerData.instanceId: %s, PlayerData.mapId: %s", 
-            instanceId, 
-            mapId, 
-            playerData.instanceId or "nil",
-            playerData.mapId or "nil"
-        ))
+        print(string.format("^2[GunGame Client]^7 Téléportation avant revive à (%.2f, %.2f, %.2f)", 
+            spawn.x, spawn.y, spawn.z))
     end
     
-    -- Vérifier que c'est bien notre instance
-    if playerData.instanceId ~= instanceId or playerData.mapId ~= mapId then
-        print(string.format("^1[GunGame Client]^7 ERREUR: Respawn pour mauvaise instance! Attendu: %s/%s, Reçu: %s/%s", 
-            tostring(playerData.instanceId), 
-            tostring(playerData.mapId),
-            tostring(instanceId),
-            tostring(mapId)
-        ))
-        return
-    end
-    
-    -- Utiliser le spawn fourni par le serveur, sinon fallback
-    local spawnPoint = spawn
-    if not spawnPoint then
-        local spawnPoints = Config.Maps[mapId].spawnPoints
-        spawnPoint = spawnPoints[math.random(1, #spawnPoints)]
-    end
-    
-    if not spawnPoint then
-        print("^1[GunGame Client]^7 ERREUR: Aucun spawn disponible pour le respawn")
-        return
-    end
-    
-    SetEntityCoords(ped, spawnPoint.x, spawnPoint.y, spawnPoint.z, false, false, false, false)
-    SetEntityHeading(ped, spawnPoint.heading)
+    -- Téléporter le joueur
+    SetEntityCoords(ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
+    SetEntityHeading(ped, spawn.heading)
+end)
 
-    -- Revive le joueur
-    NetworkResurrectLocalPlayer(spawnPoint.x, spawnPoint.y, spawnPoint.z, spawnPoint.heading or 0.0, true, true, false)
-    SetEntityHealth(ped, 200)
-    ClearPedBloodDamage(ped)
-    ClearPedTasksImmediately(ped)
-    
+-- Activation du godmode après respawn
+RegisterNetEvent('gungame:activateGodMode')
+AddEventHandler('gungame:activateGodMode', function()
     enableGodMode()
-
-    Wait(500)
-    
-    lib.notify({
-        title = 'Respawn',
-        description = 'Vous avez respawné',
-        type = 'inform',
-        duration = 2000
-    })
     
     if Config.Debug then
-        print(string.format("^2[GunGame Client]^7 Respawn effectué à (%.2f, %.2f, %.2f) sur map %s (Instance: %d)", 
-            spawnPoint.x, spawnPoint.y, spawnPoint.z, mapId, instanceId))
+        print("^2[GunGame Client]^7 GodMode activé après respawn")
     end
 end)
 
