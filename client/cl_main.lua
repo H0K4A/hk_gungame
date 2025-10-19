@@ -16,6 +16,9 @@ local playerData = {
 
 local hudVisible = true  -- HUD activé par défaut
 local killedEntities = {}
+local zoneBlip = nil
+local radiusBlip = nil
+local currentZoneData = nil
 
 -- ============================================================================
 -- INITIALISATION
@@ -69,6 +72,8 @@ RegisterCommand('leavegame', function(source, args, rawCommand)
         
         RemoveAllPedWeapons(ped, true)
         lib.hideTextUI()
+
+        removeGunGameZoneBlip()
         
         if lastSpawn then
             SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, false)
@@ -236,18 +241,44 @@ AddEventHandler('gungame:equipWeapon', function(weapon)
     local ped = PlayerPedId()
     local weaponHash = GetHashKey(weapon)
     
-    print("^2[GunGame Client]^7 Équipement de l'arme: " .. weapon)
+    print(string.format("^2[GunGame Client]^7 Équipement de l'arme: %s (Hash: %s)", 
+        weapon, weaponHash))
     
-    Wait(300)
+    -- Attendre que l'inventaire soit prêt
+    Wait(500)
     
+    -- Méthode 1: Utiliser ox_inventory pour équiper
     TriggerServerEvent('ox_inventory:useItem', weapon:lower(), nil)
     
-    SetTimeout(200, function()
+    -- Méthode 2: Forcer l'équipement si nécessaire
+    SetTimeout(400, function()
         if HasPedGotWeapon(ped, weaponHash, false) then
-            SetCurrentPedWeapon(ped, joaat(weaponHash), true)
-            print("^2[GunGame Client]^7 Arme équipée avec succès")
+            -- S'assurer que l'arme est équipée
+            SetCurrentPedWeapon(ped, weaponHash, true)
+            
+            -- Donner des munitions supplémentaires si nécessaire
+            local maxAmmo = GetMaxAmmo(ped, weaponHash)
+            SetPedAmmo(ped, weaponHash, maxAmmo)
+            
+            print("^2[GunGame Client]^7 ✓ Arme équipée avec succès")
+            
+            -- Notification visuelle
+            lib.notify({
+                title = '✅ Arme équipée',
+                description = weapon:gsub("WEAPON_", ""),
+                type = 'success',
+                duration = 2000
+            })
         else
-            print("^1[GunGame Client]^7 L'arme n'est pas dans l'inventaire")
+            print("^1[GunGame Client]^7 ✗ L'arme n'est pas dans l'inventaire")
+            
+            -- Redemander l'arme au serveur
+            SetTimeout(1000, function()
+                if playerData.inGame then
+                    print("^3[GunGame Client]^7 Tentative de récupération de l'arme...")
+                    TriggerServerEvent('gungame:requestCurrentWeapon')
+                end
+            end)
         end
     end)
     
@@ -291,7 +322,6 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     playerData.kills = 0
     playerData.currentWeaponIndex = 1
     
-    -- Utiliser le spawn fourni par le serveur, sinon fallback sur le premier spawn
     local spawnPoint = spawn or Config.Maps[mapId].spawnPoints[1]
     
     if not spawnPoint then
@@ -305,6 +335,8 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     Wait(500)
     
     enableGodMode()
+
+    createGunGameZoneBlip(mapId)
     
     lib.notify({
         title = 'GunGame',
@@ -314,8 +346,8 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     })
     
     if Config.Debug then
-        print(string.format("^2[GunGame Client]^7 Téléportation vers %s (Instance: %d) (%.2f, %.2f, %.2f)", 
-            mapId, instanceId, spawnPoint.x, spawnPoint.y, spawnPoint.z))
+        print(string.format("^2[GunGame Client]^7 Téléportation vers %s (Instance: %d)", 
+            mapId, instanceId))
     end
 end)
 
@@ -751,6 +783,8 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
     
     SetTimeout(3000, function()
         RemoveAllPedWeapons(ped, true)
+
+        removeGunGameZoneBlip()
         
         if playerData.lastSpawnPoint then
             SetEntityCoords(ped, playerData.lastSpawnPoint.x, playerData.lastSpawnPoint.y, playerData.lastSpawnPoint.z, false, false, false, false)
@@ -818,11 +852,489 @@ function DrawText3D(x, y, z, text)
 end
 
 -- ============================================================================
+-- CRÉATION DU BLIP ET DU RAYON
+-- ============================================================================
+
+function createGunGameZoneBlip(mapId)
+    if not Config.Minimap or not Config.Minimap.showZone then return end
+    
+    removeGunGameZoneBlip()
+    
+    local mapData = Config.Maps[mapId]
+    if not mapData or not mapData.battleZone then return end
+    
+    local zone = mapData.battleZone
+    currentZoneData = {
+        x = zone.x,
+        y = zone.y,
+        z = zone.z,
+        radius = zone.radius,
+        mapName = mapData.name
+    }
+    
+    -- Créer le blip central (icône)
+    zoneBlip = AddBlipForCoord(zone.x, zone.y, zone.z)
+    SetBlipSprite(zoneBlip, Config.Minimap.blip.sprite)
+    SetBlipDisplay(zoneBlip, 4)
+    SetBlipScale(zoneBlip, Config.Minimap.blip.scale)
+    SetBlipColour(zoneBlip, Config.Minimap.blip.color)
+    SetBlipAlpha(zoneBlip, Config.Minimap.blip.alpha)
+    SetBlipAsShortRange(zoneBlip, Config.Minimap.blip.shortRange)
+    
+    -- Flash si activé
+    if Config.Minimap.blip.flash then
+        SetBlipFlashes(zoneBlip, true)
+    end
+    
+    BeginTextCommandSetBlipName("STRING")
+    AddTextComponentString("🔫 Zone GunGame - " .. mapData.name)
+    EndTextCommandSetBlipName(zoneBlip)
+    
+    -- Créer le rayon (cercle) si activé
+    if Config.Minimap.radius.enabled then
+        radiusBlip = AddBlipForRadius(zone.x, zone.y, zone.z, zone.radius)
+        SetBlipRotation(radiusBlip, 0)
+        SetBlipColour(radiusBlip, Config.Minimap.radius.color)
+        SetBlipAlpha(radiusBlip, Config.Minimap.radius.alpha)
+    end
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Blip créé pour %s (rayon: %.1fm)", 
+            mapData.name, zone.radius))
+    end
+end
+
+-- ============================================================================
+-- SUPPRESSION DU BLIP
+-- ============================================================================
+
+function removeGunGameZoneBlip()
+    if zoneBlip then
+        RemoveBlip(zoneBlip)
+        zoneBlip = nil
+    end
+    
+    if radiusBlip then
+        RemoveBlip(radiusBlip)
+        radiusBlip = nil
+    end
+    
+    currentZoneData = nil
+    
+    if Config.Debug then
+        print("^3[GunGame]^7 Blips supprimés")
+    end
+end
+
+-- ============================================================================
+-- AFFICHAGE 3D (MARQUEUR ET TEXTE)
+-- ============================================================================
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(0)
+        
+        if currentZoneData and playerData.inGame then
+            local playerCoords = GetEntityCoords(PlayerPedId())
+            local distance = #(playerCoords - vector3(currentZoneData.x, currentZoneData.y, currentZoneData.z))
+            
+            -- Afficher seulement si on est proche (optimisation)
+            if distance < currentZoneData.radius + 100 then
+                
+                -- Marqueur 3D au sol
+                if Config.Minimap.marker.enabled then
+                    local marker = Config.Minimap.marker
+                    DrawMarker(
+                        marker.type,
+                        currentZoneData.x, currentZoneData.y, currentZoneData.z - 1.0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        marker.scale.x, marker.scale.y, marker.scale.z,
+                        marker.color.r, marker.color.g, marker.color.b, marker.color.a,
+                        marker.bobUpAndDown,
+                        false,
+                        2,
+                        marker.rotate,
+                        nil, nil, false
+                    )
+                end
+                
+                -- Texte 3D au centre
+                if Config.Minimap.text3D.enabled then
+                    local text3D = Config.Minimap.text3D
+                    DrawText3DZone(
+                        currentZoneData.x, 
+                        currentZoneData.y, 
+                        currentZoneData.z + text3D.height,
+                        "🔫 " .. currentZoneData.mapName:upper()
+                    )
+                end
+            end
+        else
+            Wait(500) -- Réduire la fréquence si pas en jeu
+        end
+    end
+end)
+
+-- ============================================================================
+-- FONCTION DE TEXTE 3D AMÉLIORÉE
+-- ============================================================================
+
+function DrawText3DZone(x, y, z, text)
+    local onScreen, _x, _y = World3dToScreen2d(x, y, z)
+    local px, py, pz = table.unpack(GetGameplayCamCoords())
+    local dist = #(vector3(px, py, pz) - vector3(x, y, z))
+    
+    if onScreen and dist < 300 then
+        local scale = (1 / dist) * 2
+        local fov = (1 / GetGameplayCamFov()) * 100
+        scale = scale * fov * Config.Minimap.text3D.scale
+        
+        SetTextScale(0.0, scale)
+        SetTextFont(Config.Minimap.text3D.font)
+        SetTextProportional(1)
+        SetTextColour(
+            Config.Minimap.text3D.color.r,
+            Config.Minimap.text3D.color.g,
+            Config.Minimap.text3D.color.b,
+            Config.Minimap.text3D.color.a
+        )
+        SetTextDropshadow(0, 0, 0, 0, 255)
+        SetTextEdge(2, 0, 0, 0, 150)
+        SetTextDropShadow()
+        SetTextOutline()
+        SetTextEntry("STRING")
+        SetTextCentre(1)
+        AddTextComponentString(text)
+        DrawText(_x, _y)
+    end
+end
+
+-- ============================================================================
+-- NOTIFICATIONS DE DISTANCE
+-- ============================================================================
+
+Citizen.CreateThread(function()
+    while true do
+        if Config.Minimap and Config.Minimap.distanceWarnings.enabled then
+            Wait(Config.Minimap.distanceWarnings.checkInterval or 1000)
+        else
+            Wait(5000)
+        end
+        
+        if playerData.inGame and currentZoneData then
+            local ped = PlayerPedId()
+            local coords = GetEntityCoords(ped)
+            local distance = #(coords - vector3(currentZoneData.x, currentZoneData.y, currentZoneData.z))
+            local maxRadius = currentZoneData.radius
+            
+            local warnings = Config.Minimap.distanceWarnings
+            
+            -- Avertissement critique (95%)
+            if distance > (maxRadius * warnings.criticalThreshold) and distance <= maxRadius then
+                local remaining = maxRadius - distance
+                lib.notify({
+                    title = '🚨 LIMITE DE ZONE',
+                    description = string.format('Zone limite ! (%dm restants)', math.floor(remaining)),
+                    type = 'error',
+                    duration = 2000
+                })
+            -- Avertissement normal (90%)
+            elseif distance > (maxRadius * warnings.warningThreshold) and distance <= (maxRadius * warnings.criticalThreshold) then
+                local remaining = maxRadius - distance
+                lib.notify({
+                    title = '⚠️ Approche de la limite',
+                    description = string.format('Attention ! (%dm restants)', math.floor(remaining)),
+                    type = 'warning',
+                    duration = 2000
+                })
+            end
+        end
+    end
+end)
+
+-- ============================================================================
+-- COMMANDE DE DEBUG POUR TESTER LES BLIPS
+-- ============================================================================
+
+if Config.Debug then
+    RegisterCommand('gg_testblip', function(source, args, rawCommand)
+        local mapId = args[1] or "ballas"
+        
+        if Config.Maps[mapId] then
+            createGunGameZoneBlip(mapId)
+            playerData.inGame = true
+            playerData.mapId = mapId
+            
+            lib.notify({
+                title = 'Debug',
+                description = 'Blip créé pour ' .. mapId,
+                type = 'success'
+            })
+        else
+            lib.notify({
+                title = 'Erreur',
+                description = 'Map inconnue: ' .. mapId,
+                type = 'error'
+            })
+        end
+    end, false)
+    
+    RegisterCommand('gg_removeblip', function(source, args, rawCommand)
+        removeGunGameZoneBlip()
+        playerData.inGame = false
+        playerData.mapId = nil
+        
+        lib.notify({
+            title = 'Debug',
+            description = 'Blip supprimé',
+            type = 'inform'
+        })
+    end, false)
+end
+
+-- ============================================================================
+-- EFFET VISUEL QUAND ON SORT DE LA ZONE
+-- ============================================================================
+
+-- Effet de bord d'écran rouge quand on approche de la limite
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(100)
+        
+        if playerData.inGame and currentZoneData then
+            local coords = GetEntityCoords(PlayerPedId())
+            local distance = #(coords - vector3(currentZoneData.x, currentZoneData.y, currentZoneData.z))
+            local distanceFromEdge = currentZoneData.radius - distance
+            
+            if distanceFromEdge < 10 and distanceFromEdge > -50 then
+                -- Effet rouge sur les bords
+                local intensity = math.max(0, (10 - distanceFromEdge) / 10)
+                DrawRect(0.5, 0.5, 1.0, 1.0, 255, 0, 0, math.floor(100 * intensity))
+                
+                -- Shake de caméra
+                if distanceFromEdge < 5 then
+                    ShakeGameplayCam("SMALL_EXPLOSION_SHAKE", 0.05)
+                end
+            end
+        else
+            Wait(500)
+        end
+    end
+end)
+
+-- ============================================================================
+-- BLIP DES AUTRES JOUEURS DE LA PARTIE
+-- ============================================================================
+
+-- Afficher les autres joueurs de votre instance sur la minimap
+
+local playerBlips = {}
+
+function createPlayerBlip(playerId)
+    if playerBlips[playerId] then return end
+    
+    local ped = GetPlayerPed(GetPlayerFromServerId(playerId))
+    if not DoesEntityExist(ped) then return end
+    
+    local blip = AddBlipForEntity(ped)
+    SetBlipSprite(blip, 1)
+    SetBlipColour(blip, 3) -- Bleu pour alliés
+    SetBlipScale(blip, 0.8)
+    SetBlipAsShortRange(blip, true)
+    
+    BeginTextCommandSetBlipName("STRING")
+    AddTextComponentString("Joueur GG")
+    EndTextCommandSetBlipName(blip)
+    
+    playerBlips[playerId] = blip
+end
+
+function removePlayerBlip(playerId)
+    if playerBlips[playerId] then
+        RemoveBlip(playerBlips[playerId])
+        playerBlips[playerId] = nil
+    end
+end
+
+function removeAllPlayerBlips()
+    for playerId, blip in pairs(playerBlips) do
+        RemoveBlip(blip)
+    end
+    playerBlips = {}
+end
+
+-- Event à recevoir du serveur avec la liste des joueurs
+RegisterNetEvent('gungame:updatePlayerList')
+AddEventHandler('gungame:updatePlayerList', function(players)
+    if not playerData.inGame then return end
+    
+    -- Supprimer les blips des joueurs qui ont quitté
+    for playerId, _ in pairs(playerBlips) do
+        local found = false
+        for _, pid in ipairs(players) do
+            if pid == playerId then
+                found = true
+                break
+            end
+        end
+        if not found then
+            removePlayerBlip(playerId)
+        end
+    end
+    
+    -- Créer les blips des nouveaux joueurs
+    for _, playerId in ipairs(players) do
+        if playerId ~= GetPlayerServerId(PlayerId()) then
+            createPlayerBlip(playerId)
+        end
+    end
+end)
+
+-- ============================================================================
+-- NOTIFICATION SONORE AUX LIMITES
+-- ============================================================================
+
+-- Jouer un son quand on approche de la limite
+
+local lastWarningSound = 0
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(500)
+        
+        if playerData.inGame and currentZoneData then
+            local coords = GetEntityCoords(PlayerPedId())
+            local distance = #(coords - vector3(currentZoneData.x, currentZoneData.y, currentZoneData.z))
+            local distanceFromEdge = currentZoneData.radius - distance
+            
+            if distanceFromEdge < 20 and (GetGameTimer() - lastWarningSound) > 3000 then
+                -- Son d'alarme
+                PlaySoundFrontend(-1, "CONFIRM_BEEP", "HUD_MINI_GAME_SOUNDSET", true)
+                lastWarningSound = GetGameTimer()
+            end
+        end
+    end
+end)
+
+-- ============================================================================
+-- AFFICHAGE DU CLASSEMENT SUR LA MINIMAP
+-- ============================================================================
+
+-- Afficher un mini-classement près de la minimap
+
+function DrawLeaderboard(players)
+    local startX = 0.85
+    local startY = 0.02
+    local lineHeight = 0.025
+    
+    -- Fond
+    DrawRect(startX + 0.075, startY + 0.08, 0.15, 0.16, 0, 0, 0, 200)
+    
+    -- Titre
+    SetTextFont(4)
+    SetTextScale(0.0, 0.35)
+    SetTextCentre(true)
+    SetTextColour(255, 51, 51, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString("TOP 5")
+    DrawText(startX + 0.075, startY)
+    
+    -- Joueurs
+    for i = 1, math.min(5, #players) do
+        local player = players[i]
+        local currentY = startY + 0.03 + (i * lineHeight)
+        
+        -- Couleur selon le rang
+        local r, g, b = 255, 255, 255
+        if i == 1 then r, g, b = 255, 215, 0 end  -- Or
+        if i == 2 then r, g, b = 192, 192, 192 end -- Argent
+        if i == 3 then r, g, b = 205, 127, 50 end  -- Bronze
+        
+        SetTextFont(0)
+        SetTextScale(0.0, 0.28)
+        SetTextColour(r, g, b, 255)
+        SetTextEntry("STRING")
+        AddTextComponentString(string.format("%d. %s", i, player.name))
+        DrawText(startX + 0.015, currentY)
+        
+        -- Kills
+        SetTextFont(4)
+        SetTextScale(0.0, 0.28)
+        SetTextRightJustify(true)
+        SetTextWrap(0.0, startX + 0.135)
+        SetTextColour(255, 51, 51, 255)
+        SetTextEntry("STRING")
+        AddTextComponentString(tostring(player.kills))
+        DrawText(0, currentY)
+    end
+end
+
+-- Thread d'affichage du classement
+Citizen.CreateThread(function()
+    while true do
+        Wait(0)
+        
+        if playerData.inGame and Config.ShowLeaderboard then
+            -- Demander le classement au serveur toutes les 5 secondes
+            -- DrawLeaderboard(receivedPlayers)
+        else
+            Wait(1000)
+        end
+    end
+end)
+
+-- ============================================================================
+-- PARTICULES AUX LIMITES DE LA ZONE
+-- ============================================================================
+
+-- Effet de particules rouges aux bords de la zone
+
+Citizen.CreateThread(function()
+    -- Charger le dictionnaire de particules
+    RequestNamedPtfxAsset("core")
+    while not HasNamedPtfxAssetLoaded("core") do
+        Wait(1)
+    end
+    
+    while true do
+        Wait(1000)
+        
+        if playerData.inGame and currentZoneData then
+            local coords = GetEntityCoords(PlayerPedId())
+            local distance = #(coords - vector3(currentZoneData.x, currentZoneData.y, currentZoneData.z))
+            local distanceFromEdge = currentZoneData.radius - distance
+            
+            -- Créer des particules si on est proche du bord
+            if distanceFromEdge < 15 and distanceFromEdge > 0 then
+                -- Direction vers le centre
+                local dirToCenter = vector3(currentZoneData.x, currentZoneData.y, currentZoneData.z) - coords
+                dirToCenter = dirToCenter / #dirToCenter -- Normaliser
+                
+                -- Position des particules (derrière le joueur)
+                local particlePos = coords - (dirToCenter * 2.0)
+                
+                UseParticleFxAsset("core")
+                StartParticleFxNonLoopedAtCoord(
+                    "exp_grd_bzgas_smoke",
+                    particlePos.x, particlePos.y, particlePos.z,
+                    0.0, 0.0, 0.0,
+                    0.5, false, false, false
+                )
+            end
+        end
+    end
+end)
+
+-- ============================================================================
 -- NETTOYAGE
 -- ============================================================================
 
 AddEventHandler('onClientResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
+
+    removeGunGameZoneBlip()
     
     if playerData.inGame then
         RemoveAllPedWeapons(PlayerPedId(), true)
@@ -831,6 +1343,7 @@ AddEventHandler('onClientResourceStop', function(resourceName)
 end)
 
 AddEventHandler('playerDropped', function(reason)
+    removeGunGameZoneBlip()
     playerData.inGame = false
     lib.hideTextUI()
 end)

@@ -463,6 +463,263 @@ Config.WeaponAmmo = {
 }
 
 -- ============================================================================
+-- PRESET 1: STYLE MILITAIRE
+-- ============================================================================
+Config.Minimap = {
+    showZone = true,
+    blip = {
+        sprite = 437, -- Icône de pistolet
+        color = 1,    -- Rouge vif
+        scale = 1.3,
+        alpha = 255,
+        flash = false,
+        shortRange = false
+    },
+    radius = {
+        enabled = true,
+        color = 1,
+        alpha = 120
+    },
+    marker = {
+        enabled = false
+    },
+    text3D = {
+        enabled = true,
+        height = 25.0,
+        scale = 0.7,
+        font = 4,
+        color = {r = 255, g = 51, b = 51, a = 255}
+    },
+    distanceWarnings = {
+        enabled = true,
+        warningThreshold = 0.85,
+        criticalThreshold = 0.95,
+        checkInterval = 2000
+    }
+}
+
+-- ============================================================================
+-- PRESET 2: STYLE DISCRET (Performance optimale)
+-- ============================================================================
+--[[
+Config.Minimap = {
+    showZone = true,
+    blip = {
+        sprite = 1, -- Point simple
+        color = 1,
+        scale = 0.8,
+        alpha = 200,
+        flash = false,
+        shortRange = true -- Visible seulement de près
+    },
+    radius = {
+        enabled = true,
+        color = 1,
+        alpha = 80 -- Plus transparent
+    },
+    marker = {
+        enabled = false
+    },
+    text3D = {
+        enabled = false -- Désactivé pour performance
+    },
+    distanceWarnings = {
+        enabled = false
+    }
+}
+]]
+
+-- ============================================================================
+-- PRESET 3: STYLE AGRESSIF (Maximum de visuels)
+-- ============================================================================
+--[[
+Config.Minimap = {
+    showZone = true,
+    blip = {
+        sprite = 303, -- Skull avec viseur
+        color = 1,
+        scale = 1.5,
+        alpha = 255,
+        flash = true, -- Clignotant
+        shortRange = false
+    },
+    radius = {
+        enabled = true,
+        color = 1,
+        alpha = 150
+    },
+    marker = {
+        enabled = true, -- Marqueur 3D activé
+        type = 1,
+        color = {r = 255, g = 0, b = 0, a = 120},
+        scale = {x = 3.0, y = 3.0, z = 3.0},
+        rotate = true,
+        bobUpAndDown = true
+    },
+    text3D = {
+        enabled = true,
+        height = 30.0,
+        scale = 1.0,
+        font = 4,
+        color = {r = 255, g = 0, b = 0, a = 255}
+    },
+    distanceWarnings = {
+        enabled = true,
+        warningThreshold = 0.80,
+        criticalThreshold = 0.90,
+        checkInterval = 1000
+    }
+}
+]]
+
+-- ============================================================================
+-- PRESET 4: STYLE GANG WAR
+-- ============================================================================
+--[[
+Config.Minimap = {
+    showZone = true,
+    blip = {
+        sprite = 378, -- Gang War
+        color = 1,
+        scale = 1.2,
+        alpha = 255,
+        flash = false,
+        shortRange = false
+    },
+    radius = {
+        enabled = true,
+        color = 6, -- Rose/Violet
+        alpha = 100
+    },
+    marker = {
+        enabled = false
+    },
+    text3D = {
+        enabled = true,
+        height = 20.0,
+        scale = 0.8,
+        font = 4,
+        color = {r = 255, g = 0, b = 255, a = 255} -- Violet
+    },
+    distanceWarnings = {
+        enabled = true,
+        warningThreshold = 0.85,
+        criticalThreshold = 0.95,
+        checkInterval = 2000
+    }
+}
+]]
+
+-- ============================================================================
+-- PRESET 5: STYLE MINIMALISTE (Blip uniquement)
+-- ============================================================================
+--[[
+Config.Minimap = {
+    showZone = true,
+    blip = {
+        sprite = 437,
+        color = 1,
+        scale = 1.0,
+        alpha = 255,
+        flash = false,
+        shortRange = false
+    },
+    radius = {
+        enabled = false -- Pas de cercle
+    },
+    marker = {
+        enabled = false
+    },
+    text3D = {
+        enabled = false
+    },
+    distanceWarnings = {
+        enabled = false
+    }
+}
+]]
+
+-- ============================================================================
+-- PRESET 6: STYLE COMPÉTITIF (Battle Royale)
+-- ============================================================================
+--[[
+Config.Minimap = {
+    showZone = true,
+    blip = {
+        sprite = 605, -- Battle Zone
+        color = 5, -- Jaune
+        scale = 1.4,
+        alpha = 255,
+        flash = true,
+        shortRange = false
+    },
+    radius = {
+        enabled = true,
+        color = 5, -- Jaune
+        alpha = 100
+    },
+    marker = {
+        enabled = true,
+        type = 28, -- Cylindre avec flèche
+        color = {r = 255, g = 215, b = 0, a = 150},
+        scale = {x = 2.5, y = 2.5, z = 4.0},
+        rotate = true,
+        bobUpAndDown = false
+    },
+    text3D = {
+        enabled = true,
+        height = 35.0,
+        scale = 0.9,
+        font = 4,
+        color = {r = 255, g = 215, b = 0, a = 255} -- Or
+    },
+    distanceWarnings = {
+        enabled = true,
+        warningThreshold = 0.80,
+        criticalThreshold = 0.90,
+        checkInterval = 1500
+    }
+}
+]]
+
+
+-- ============================================================================
+-- SPRITES DE BLIPS DISPONIBLES
+-- ============================================================================
+--[[
+    1   = Point simple
+    40  = Skull (tête de mort)
+    84  = Hélicoptère
+    110 = Gun Shop
+    214 = Ambulance
+    266 = Gang
+    270 = Gang Fight
+    303 = Skull + Crosshairs
+    348 = Deathmatch
+    378 = Gang War
+    437 = Gun (icône de pistolet)
+    605 = Battle Zone
+]]
+
+-- ============================================================================
+-- COULEURS DE BLIPS DISPONIBLES
+-- ============================================================================
+--[[
+    0  = Blanc
+    1  = Rouge
+    2  = Vert
+    3  = Bleu
+    4  = Jaune clair
+    5  = Jaune
+    6  = Rose
+    18 = Orange
+    25 = Violet
+    27 = Marron
+    47 = Rose vif
+    59 = Or
+]]
+
+-- ============================================================================
 -- PERMISSIONS & COMMANDES
 -- ============================================================================
 Config.Commands = {

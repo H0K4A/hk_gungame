@@ -284,35 +284,58 @@ AddEventHandler('gungame:playerKill', function(targetSource)
     if nextWeaponIndex > weaponsCount then
         -- Le joueur a gagné !
         winnerDetected(source, instanceId)
-    else
-        local currentWeapon = Config.Weapons[playerData[source].currentWeapon]:lower()
-        
-        -- Retirer l'arme actuelle
-        exports.ox_inventory:RemoveItem(source, currentWeapon, 1)
-        
-        Wait(200)
-        
-        -- Donner la nouvelle arme
-        playerData[source].currentWeapon = nextWeaponIndex
-        local nextWeapon = Config.Weapons[nextWeaponIndex]
-        giveWeaponToPlayer(source, nextWeapon, instanceId, false)
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = 'Kill !',
-            description = nextWeapon .. ' (' .. nextWeaponIndex .. '/' .. weaponsCount .. ')',
-            type = 'success'
+        return
+    end
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Kill détecté: Joueur %d passe de l'arme %d à %d", 
+            source, playerData[source].currentWeapon, nextWeaponIndex))
+    end
+    
+    -- Étape 1: Nettoyer TOUTES les armes
+    TriggerClientEvent('gungame:clearAllInventory', source)
+    
+    -- Étape 2: Retirer l'arme actuelle côté serveur
+    local currentWeapon = Config.Weapons[playerData[source].currentWeapon]:lower()
+    exports.ox_inventory:RemoveItem(source, currentWeapon, 1)
+    
+    -- Étape 3: Attendre que le nettoyage soit effectif
+    Wait(500)
+    
+    -- Étape 4: Mettre à jour l'index de l'arme
+    playerData[source].currentWeapon = nextWeaponIndex
+    local nextWeapon = Config.Weapons[nextWeaponIndex]
+    
+    -- Étape 5: Donner la nouvelle arme
+    giveWeaponToPlayer(source, nextWeapon, instanceId, false)
+    
+    -- Notification
+    TriggerClientEvent('ox_lib:notify', source, {
+        title = '🔫 Kill !',
+        description = string.format('%s (%d/%d)', nextWeapon:gsub("WEAPON_", ""), nextWeaponIndex, weaponsCount),
+        type = 'success',
+        duration = 3000
+    })
+    
+    -- Notifier les autres joueurs
+    local killerName = ESX.GetPlayerFromId(source).getName()
+    local victimName = ESX.GetPlayerFromId(targetSource).getName()
+    
+    for _, playerId in ipairs(instance.players) do
+        TriggerClientEvent('ox_lib:notify', playerId, {
+            title = '💀 Élimination',
+            description = killerName .. ' a éliminé ' .. victimName,
+            type = 'inform'
         })
     end
     
-    -- Notifier les autres joueurs
-    TriggerClientEvent('ox_lib:notify', -1, {
-        title = 'Élimination',
-        description = ESX.GetPlayerFromId(source).getName() .. ' a éliminé ' .. ESX.GetPlayerFromId(targetSource).getName(),
-        type = 'inform'
-    })
-    
     -- Sauvegarder les stats
     savePlayerStatistics(source)
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Arme changée avec succès: %s -> %s", 
+            currentWeapon, nextWeapon))
+    end
 end)
 
 -- ============================================================================
@@ -499,35 +522,62 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     end
     
     if Config.Debug then
-        print("^2[GunGame Server]^7 Fonction giveWeaponToPlayer - Joueur: " .. source .. " Arme: " .. weapon)
+        print(string.format("^2[GunGame]^7 Début giveWeaponToPlayer - Joueur: %d, Arme: %s", 
+            source, weapon))
     end
     
     local ammo = Config.WeaponAmmo[weapon] or 500
     local weaponName = weapon:lower()
     
+    -- Vérifier si l'arme existe déjà (sécurité)
+    local hasWeapon = exports.ox_inventory:GetItem(source, weaponName, nil, false)
+    if hasWeapon and hasWeapon.count > 0 then
+        if Config.Debug then
+            print("^3[GunGame]^7 Arme déjà présente, suppression...")
+        end
+        exports.ox_inventory:RemoveItem(source, weaponName, hasWeapon.count)
+        Wait(200)
+    end
+    
     -- Donner l'arme via ox_inventory
-    local success = exports.ox_inventory:AddItem(source, weaponName, 1, {
+    local success, response = exports.ox_inventory:AddItem(source, weaponName, 1, {
         ammo = ammo,
         durability = 100
     })
     
     if success then
         if Config.Debug then
-            print("^2[GunGame Server]^7 Arme " .. weaponName .. " donnée avec succès")
+            print(string.format("^2[GunGame]^7 ✓ Arme %s donnée avec succès (ammo: %d)", 
+                weaponName, ammo))
         end
         
+        -- Attendre un peu pour que l'inventaire se synchronise
+        Wait(300)
+        
         -- Forcer l'équipement côté client
-        SetTimeout(200, function()
-            TriggerClientEvent('gungame:equipWeapon', source, weapon)
-        end)
+        TriggerClientEvent('gungame:equipWeapon', source, weapon)
         
         -- Notifier le joueur
+        local weaponLabel = weapon:gsub("WEAPON_", "")
         TriggerClientEvent('ox_lib:notify', source, {
-            title = '🔫 Arme reçue',
-            description = weapon .. ' (' .. ammo .. ' munitions)',
+            title = isFirstWeapon and '🎯 Arme de départ' or '🔫 Nouvelle arme',
+            description = string.format('%s (%d munitions)', weaponLabel, ammo),
             type = 'success',
-            duration = 2000
+            duration = 2500
         })
+    else
+        print(string.format("^1[GunGame]^7 ✗ Échec ajout arme %s: %s", 
+            weaponName, response or "erreur inconnue"))
+        
+        -- Retry après un délai
+        SetTimeout(500, function()
+            if playerData[source] and playerData[source].instanceId == instanceId then
+                if Config.Debug then
+                    print("^3[GunGame]^7 Tentative de réessai...")
+                end
+                giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
+            end
+        end)
     end
 end
 
@@ -662,6 +712,59 @@ function restorePlayerInventory(source, inventory)
         end
     end)
 end
+
+-- ============================================================================
+-- UPDATE PLAYERS LISTS
+-- ============================================================================
+
+local gungamePlayers = {} -- { [playerId] = mapId }
+
+-- Envoie la liste des joueurs de la même map à tous les joueurs concernés
+local function updatePlayerLists(mapId)
+    local players = {}
+
+    -- On récupère les joueurs qui sont sur la même carte
+    for pid, mid in pairs(gungamePlayers) do
+        if mid == mapId then
+            table.insert(players, pid)
+        end
+    end
+
+    -- On renvoie cette liste à tous les joueurs de la même map
+    for pid, mid in pairs(gungamePlayers) do
+        if mid == mapId then
+            TriggerClientEvent('gungame:updatePlayerList', pid, players)
+        end
+    end
+end
+
+-- ✅ Le joueur rejoint la GunGame
+RegisterNetEvent('gungame:joinGame', function(mapId)
+    local src = source
+    gungamePlayers[src] = mapId
+    updatePlayerLists(mapId)
+end)
+
+-- ✅ Le joueur quitte la GunGame
+RegisterNetEvent('gungame:leaveGame', function()
+    local src = source
+    local mapId = gungamePlayers[src]
+    if mapId then
+        gungamePlayers[src] = nil
+        updatePlayerLists(mapId)
+    end
+end)
+
+-- ✅ Si crash / déco → on le retire
+AddEventHandler('playerDropped', function()
+    local src = source
+    local mapId = gungamePlayers[src]
+    if mapId then
+        gungamePlayers[src] = nil
+        updatePlayerLists(mapId)
+    end
+end)
+
 
 -- ============================================================================
 -- PERSISTANCE DES DONNÉES
