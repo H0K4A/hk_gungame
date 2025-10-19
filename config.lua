@@ -1,362 +1,49 @@
 Config = {}
 
 -- Activer/Désactiver le mode debug
-Config.Debug = false
+Config.Debug = true -- Activé pour voir les logs de kills
 
 -- ============================================================================
 -- SYSTÈME D'INSTANCES - GUNGAME UNIQUE
 -- ============================================================================
--- Chaque partie GunGame crée une instance isolée pour ses joueurs
 Config.InstanceSystem = {
     enabled = true,
     maxPlayersPerInstance = 20,
-    autoCreateInstance = true -- Crée une nouvelle instance si aucune disponible
+    autoCreateInstance = true
 }
 
 -- ============================================================================
 -- SYSTÈME DE ROTATION DES SPAWNS
 -- ============================================================================
 Config.SpawnSystem = {
-    randomSpawn = true, -- Si true, spawn aléatoire. Si false, rotation séquentielle
-    minDistanceBetweenPlayers = 10.0, -- Distance minimum entre les joueurs au spawn
-    checkOccupiedSpawns = true -- Vérifie si un spawn est occupé avant de l'utiliser
+    randomSpawn = true,
+    minDistanceBetweenPlayers = 10.0,
+    checkOccupiedSpawns = true
 }
 
 -- ============================================================================
--- MAPS GUNGAME - NOUVELLES MAPS AVEC SPAWNS MULTIPLES
+-- CONFIGURATION DU GUNGAME - NOUVEAU SYSTÈME DE KILLS
 -- ============================================================================
-Config.Maps = {
-    ["ballas"] = {
-        name = "Ballas",
-        label = "🟣 Ballas Territory",
-        battleZone = {
-            x = 83.261536,
-            y = -1907.393432,
-            z = 21.191894,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = 56.254944, y = -1944.224122, z = 20.989746, heading = 311.811036},
-            {x = 102.118682, y = -1899.098876, z = 21.057128, heading = 147.401580},
-            {x = 76.048356, y = -1977.112060, z = 20.888672, heading = 323.149598},
-            {x = 129.810990, y = -1962.184570, z = 18.479126, heading = 2.834646},
-            {x = 39.810990, y = -1847.340698, z = 23.668824, heading = 311.811036},
-            {x = 3.098902, y = -1882.734008, z = 23.315064, heading = 323.149598},
-            {x = 21.402198, y = -1819.424194, z = 25.657104, heading = 31.181102},
-            {x = 166.879120, y = -1935.837402, z = 19.776612, heading = 42.519684},
-            {x = 148.470336, y = -1901.261596, z = 23.163330, heading = 334.488190},
-            {x = 144.580216, y = -1843.621948, z = 24.983154, heading = 14.173228},
-            {x = 125.775826, y = -1910.769288, z = 20.922364, heading = 53.858268},
-            {x = 77.221978, y = -1855.648316, z = 22.405152, heading = 116.220474},
-            {x = 2.479120, y = -1895.314332, z = 23.230712, heading = 232.440948},
-            {x = 29.327474, y = -1825.213134, z = 24.679810, heading = 232.440948},
-            {x = 44.769230, y = -1947.309936, z = 21.394166, heading = 215.433074},
-            {x = 57.481320, y = -1929.665894, z = 21.495240, heading = 201.259842},
-            {x = 119.498902, y = -1923.890136, z = 20.922364, heading = 144.566926},
-            {x = 125.683518, y = -1952.650512, z = 20.703248, heading = 17.007874},
-            {x = 132.527466, y = -1930.523072, z = 20.989746, heading = 297.637786},
-            {x = 108.989014, y = -1902.303344, z = 21.057128, heading = 345.826782}
-        }
-    },
+Config.GunGame = {
+    -- Nombre de kills pour passer à l'arme suivante
+    killsPerWeapon = 2, -- 2 kills par arme
     
-    ["fourriere"] = {
-        name = "Fourrière",
-        label = "🚗 Fourrière",
-        battleZone = {
-            x = 425.538452,
-            y = -1524.131836,
-            z = 29.279908,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = 428.294494, y = -1508.255004, z = 29.279908, heading = 260.787414},
-            {x = 446.254944, y = -1491.112060, z = 29.279908, heading = 59.527558},
-            {x = 406.140656, y = -1488.421998, z = 29.347290, heading = 28.346456},
-            {x = 374.716492, y = -1504.219726, z = 29.279908, heading = 116.220474},
-            {x = 437.050538, y = -1553.749512, z = 29.279908, heading = 189.921264},
-            {x = 440.545044, y = -1581.665894, z = 29.279908, heading = 280.629914},
-            {x = 470.057128, y = -1565.103272, z = 29.279908, heading = 226.771652},
-            {x = 460.945068, y = -1541.314332, z = 29.279908, heading = 218.267716},
-            {x = 454.707702, y = -1497.824218, z = 28.184570, heading = 226.771652},
-            {x = 487.173614, y = -1519.621948, z = 29.279908, heading = 172.913392},
-            {x = 502.101104, y = -1529.815430, z = 29.313598, heading = 22.677164},
-            {x = 485.762634, y = -1491.692260, z = 29.279908, heading = 297.637786},
-            {x = 482.531860, y = -1536.118652, z = 29.263062, heading = 229.606292},
-            {x = 454.628570, y = -1571.920898, z = 32.784668, heading = 141.732284},
-            {x = 478.417572, y = -1552.813232, z = 32.784668, heading = 232.440948},
-            {x = 462.382416, y = -1600.707642, z = 29.279908, heading = 226.771652},
-            {x = 470.070344, y = -1565.235108, z = 29.279908, heading = 229.606292},
-            {x = 421.094512, y = -1489.674682, z = 29.279908, heading = 255.118104},
-            {x = 397.331878, y = -1530.158204, z = 29.347290, heading = 218.267716},
-            {x = 464.492310, y = -1512.909912, z = 34.520142, heading = 113.385826}
-        }
-    },
+    -- Nombre de kills pour la dernière arme (pour gagner)
+    killsForLastWeapon = 1, -- 1 kill avec la dernière arme
     
-    ["cayo"] = {
-        name = "Cayo Perico",
-        label = "🏝️ Cayo Perico",
-        battleZone = {
-            x = 4945.147460,
-            y = -5222.716308,
-            z = 2.488648,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = 4918.483398, y = -5274.566894, z = 5.639526, heading = 314.645660},
-            {x = 4918.206542, y = -5229.876954, z = 2.505494, heading = 124.724412},
-            {x = 4890.026368, y = -5198.676758, z = 2.438110, heading = 320.314972},
-            {x = 4866.949218, y = -5159.973632, z = 2.438110, heading = 201.259842},
-            {x = 4856.254882, y = -5237.749512, z = 17.080566, heading = 212.598420},
-            {x = 4928.808594, y = -5300.558106, z = 5.808106, heading = 178.582688},
-            {x = 4966.021972, y = -5317.015625, z = 8.133300, heading = 263.622070},
-            {x = 4982.202148, y = -5211.428710, z = 2.488648, heading = 124.724412},
-            {x = 5002.298828, y = -5192.004394, z = 2.505494, heading = 306.141724},
-            {x = 5007.494628, y = -5147.340820, z = 2.589722, heading = 311.811036},
-            {x = 4976.017578, y = -5139.745118, z = 2.775146, heading = 104.881896},
-            {x = 4954.931640, y = -5155.674804, z = 2.438110, heading = 124.724412},
-            {x = 4955.670410, y = -5109.165040, z = 3.769288, heading = 158.740158},
-            {x = 4952.188964, y = -5088.395508, z = 3.229980, heading = 59.527558},
-            {x = 4952.360352, y = -5179.002442, z = 2.471802, heading = 85.039368},
-            {x = 4879.833008, y = -5269.938476, z = 8.958984, heading = 212.598420},
-            {x = 5000.676758, y = -5214.237304, z = 2.488648, heading = 209.763778},
-            {x = 4965.191406, y = -5093.894532, z = 3.229980, heading = 294.803162},
-            {x = 4838.795410, y = -5177.182618, z = 2.202148, heading = 14.173228},
-            {x = 4908.540528, y = -5332.417480, z = 9.953125, heading = 323.149598}
-        }
-    },
+    -- Délai avant respawn après mort (en ms)
+    respawnDelay = 2000,
     
-    ["fuente_blanca"] = {
-        name = "Fuente Blanca",
-        label = "🏜️ Fuente Blanca",
-        battleZone = {
-            x = 1432.470336,
-            y = 1114.457154,
-            z = 114.236572,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = 1336.509888, y = 1133.894532, z = 110.226318, heading = 102.047248},
-            {x = 1356.184570, y = 1183.226318, z = 112.130372, heading = 311.811036},
-            {x = 1395.072510, y = 1167.837402, z = 114.320922, heading = 357.165344},
-            {x = 1407.744996, y = 1156.298950, z = 114.438842, heading = 269.291352},
-            {x = 1399.318726, y = 1165.015380, z = 114.320922, heading = 184.251968},
-            {x = 1402.127442, y = 1134.250610, z = 114.320922, heading = 93.543304},
-            {x = 1396.984620, y = 1114.298950, z = 114.826416, heading = 59.527558},
-            {x = 1459.912110, y = 1134.329712, z = 114.320922, heading = 272.125976},
-            {x = 1446.421998, y = 1151.854980, z = 114.320922, heading = 195.590546},
-            {x = 1468.641724, y = 1152.474732, z = 114.304078, heading = 187.086608},
-            {x = 1490.492310, y = 1132.734008, z = 114.320922, heading = 269.291352},
-            {x = 1442.558228, y = 1156.628540, z = 114.320922, heading = 11.338582},
-            {x = 1416.738404, y = 1184.887940, z = 113.916504, heading = 342.992126},
-            {x = 1462.193360, y = 1087.450562, z = 114.320922, heading = 90.708656},
-            {x = 1488.382446, y = 1044.184570, z = 114.320922, heading = 303.307098},
-            {x = 1394.452758, y = 1045.028564, z = 114.320922, heading = 269.291352},
-            {x = 1496.901124, y = 1105.991210, z = 114.320922, heading = 263.622070},
-            {x = 1392.804444, y = 1138.404418, z = 114.438842, heading = 113.385826},
-            {x = 1409.274780, y = 1104.263794, z = 114.287232, heading = 198.425202},
-            {x = 1442.373658, y = 1171.450562, z = 114.320922, heading = 34.015748}
-        }
-    },
+    -- Dégâts et équilibre
+    godmodeAfterSpawn = 3000,
+    giveAmmoPerSpawn = 500,
     
-    ["chantier"] = {
-        name = "Chantier",
-        label = "🏗️ Chantier",
-        battleZone = {
-            x = 50.0,
-            y = -370.0,
-            z = 40.0,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = 116.426376, y = -457.793396, z = 41.125244, heading = 178.582688},
-            {x = 77.947250, y = -464.571442, z = 37.536254, heading = 31.181102},
-            {x = 33.903298, y = -462.501098, z = 39.912110, heading = 82.204728},
-            {x = -18.659340, y = -478.668122, z = 34.958252, heading = 252.283462},
-            {x = 145.490112, y = -375.876922, z = 43.248292, heading = 342.992126},
-            {x = 90.685714, y = -371.564850, z = 42.052002, heading = 31.181102},
-            {x = 102.725274, y = -331.701110, z = 43.838134, heading = 340.157470},
-            {x = 61.371430, y = -316.193420, z = 44.865966, heading = 68.031494},
-            {x = 59.208790, y = -366.738464, z = 39.912110, heading = 119.055114},
-            {x = 16.826374, y = -370.325286, z = 39.305542, heading = 243.779526},
-            {x = -1.740658, y = -430.786804, z = 39.541382, heading = 164.409454},
-            {x = -53.564834, y = -398.452758, z = 38.125976, heading = 246.614166},
-            {x = -65.037362, y = -477.389008, z = 34.806640, heading = 76.535438},
-            {x = -28.140660, y = -344.742858, z = 43.062988, heading = 342.992126},
-            {x = -19.674724, y = -304.641754, z = 45.539916, heading = 255.118104},
-            {x = -31.318682, y = -361.054932, z = 42.237304, heading = 65.196854},
-            {x = 28.931870, y = -408.356048, z = 39.912110, heading = 252.283462},
-            {x = 136.074722, y = -287.696716, z = 46.298218, heading = 73.700790},
-            {x = 99.323074, y = -280.114288, z = 47.275512, heading = 155.905518},
-            {x = 62.030770, y = -259.898896, z = 48.185302, heading = 56.692914}
-        }
-    },
+    -- Notification de progression
+    notifyOnKill = true,
+    notifyOnDeath = true,
     
-    ["universite"] = {
-        name = "Université",
-        label = "🎓 Université",
-        battleZone = {
-            x = -1645.292358,
-            y = 217.199996,
-            z = 60.637330,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = -1659.876954, y = 241.160446, z = 62.389770, heading = 257.952758},
-            {x = -1675.476928, y = 265.503296, z = 62.389770, heading = 340.157470},
-            {x = -1719.243896, y = 245.446152, z = 62.389770, heading = 73.700790},
-            {x = -1737.903320, y = 218.835160, z = 64.428588, heading = 136.062988},
-            {x = -1707.019776, y = 187.410996, z = 63.923096, heading = 277.795288},
-            {x = -1683.956054, y = 151.120880, z = 63.855712, heading = 124.724412},
-            {x = -1671.784668, y = 174.118682, z = 61.749512, heading = 113.385826},
-            {x = -1668.079102, y = 190.272522, z = 61.749512, heading = 36.850396},
-            {x = -1636.008790, y = 180.949448, z = 61.749512, heading = 300.472442},
-            {x = -1595.340698, y = 222.751648, z = 58.969238, heading = 22.677164},
-            {x = -1683.428588, y = 130.325272, z = 63.822022, heading = 130.393708},
-            {x = -1624.918702, y = 244.206588, z = 59.542114, heading = 342.992126},
-            {x = -1644.883544, y = 263.169220, z = 59.542114, heading = 354.330718},
-            {x = -1550.518676, y = 210.619782, z = 58.851318, heading = 266.456696},
-            {x = -1748.531860, y = 232.285720, z = 64.445434, heading = 119.055114},
-            {x = -1587.006592, y = 261.995606, z = 58.986084, heading = 73.700790},
-            {x = -1707.151612, y = 187.516480, z = 63.923096, heading = 252.283462},
-            {x = -1659.336304, y = 264.303284, z = 62.372924, heading = 113.385826},
-            {x = -1724.769288, y = 234.949448, z = 58.463746, heading = 22.677164},
-            {x = -1638.527466, y = 220.035172, z = 61.193360, heading = 297.637786}
-        }
-    },
-    
-    ["pecheur"] = {
-        name = "Pêcheur",
-        label = "🎣 Pêcheur",
-        battleZone = {
-            x = 1337.248292,
-            y = 4333.846192,
-            z = 37.822754,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = 1332.632934, y = 4325.419922, z = 38.075440, heading = 345.826782},
-            {x = 1335.138428, y = 4306.694336, z = 38.092286, heading = 257.952758},
-            {x = 1302.804444, y = 4228.522950, z = 33.896728, heading = 73.700790},
-            {x = 1366.786866, y = 4309.200196, z = 38.024902, heading = 266.456696},
-            {x = 1287.217530, y = 4353.244140, z = 41.310668, heading = 76.535438},
-            {x = 1337.657104, y = 4387.806640, z = 44.326782, heading = 70.866142},
-            {x = 1336.654908, y = 4362.013184, z = 44.360474, heading = 280.629914},
-            {x = 1371.705444, y = 4354.826172, z = 44.495240, heading = 263.622070},
-            {x = 1384.747314, y = 4388.162598, z = 44.478394, heading = 325.984252},
-            {x = 1428.408814, y = 4378.878906, z = 44.276246, heading = 51.023624},
-            {x = 1397.129638, y = 4282.971192, z = 36.019776, heading = 215.433074},
-            {x = 1357.015380, y = 4386.342774, z = 44.343628, heading = 167.244094},
-            {x = 1290.619750, y = 4367.406738, z = 41.378052, heading = 42.519684},
-            {x = 1283.696656, y = 4299.679200, z = 31.891602, heading = 218.267716},
-            {x = 1301.986816, y = 4339.252930, z = 38.833740, heading = 113.385826},
-            {x = 1343.419800, y = 4340.307618, z = 38.311402, heading = 184.251968},
-            {x = 1265.551636, y = 4335.956054, z = 41.698120, heading = 260.787414},
-            {x = 1309.437378, y = 4361.960450, z = 41.529664, heading = 255.118104},
-            {x = 1267.173584, y = 4328.531738, z = 39.878418, heading = 272.125976},
-            {x = 1317.059326, y = 4286.637208, z = 31.386108, heading = 263.622070}
-        }
-    },
-    
-    ["motel_skatepark"] = {
-        name = "Motel/SkatePark",
-        label = "🛹 Motel & Skatepark",
-        battleZone = {
-            x = 298.958252,
-            y = -199.898896,
-            z = 61.564086,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = 295.213196, y = -213.085708, z = 61.564086, heading = 221.102372},
-            {x = 253.740662, y = -200.096710, z = 61.564086, heading = 161.574798},
-            {x = 261.494506, y = -182.017578, z = 61.564086, heading = 340.157470},
-            {x = 289.450562, y = -161.340652, z = 64.613892, heading = 65.196854},
-            {x = 241.912094, y = -134.294510, z = 63.754638, heading = 96.377944},
-            {x = 237.573624, y = -151.912094, z = 59.087158, heading = 127.559052},
-            {x = 307.397796, y = -215.920884, z = 54.217530, heading = 297.637786},
-            {x = 335.287902, y = -226.839570, z = 54.217530, heading = 56.692914},
-            {x = 346.879120, y = -197.235168, z = 54.217530, heading = 99.212594},
-            {x = 332.320892, y = -164.399994, z = 60.114990, heading = 255.118104},
-            {x = 222.698898, y = -175.819778, z = 57.907714, heading = 22.677164},
-            {x = 355.872528, y = -200.426376, z = 57.419068, heading = 252.283462},
-            {x = 255.810990, y = -256.905488, z = 54.032226, heading = 337.322846},
-            {x = 247.582412, y = -126.184616, z = 70.090088, heading = 73.700790},
-            {x = 328.378022, y = -224.360444, z = 58.008790, heading = 342.992126},
-            {x = 218.109894, y = -138.145050, z = 63.822022, heading = 62.362206},
-            {x = 213.296708, y = -154.483520, z = 58.952392, heading = 76.535438},
-            {x = 339.296692, y = -237.969238, z = 61.564086, heading = 65.196854},
-            {x = 292.127472, y = -133.397796, z = 69.534058, heading = 70.866142},
-            {x = 323.670318, y = -185.789002, z = 57.334838, heading = 342.992126}
-        }
-    },
-
-    ["grapeseed"] = {
-        name = "Grapeseed",
-        label = "🌾 Grapeseed",
-        battleZone = {
-            x = 1669.556030,
-            y = 4853.208984,
-            z = 42.052002,
-            radius = 147.401580
-        },
-        spawnPoints = {
-            {x = 2337.454834, y = 3120.764892, z = 48.202148, heading = 127.559052},
-            {x = 2342.241700, y = 3144.593506, z = 48.202148, heading = 192.755906},
-            {x = 2348.742920, y = 3118.377930, z = 48.202148, heading = 274.960632},
-            {x = 2377.450440, y = 3104.254882, z = 48.134766, heading = 53.858268},
-            {x = 2359.424072, y = 3148.984620, z = 48.202148, heading = 351.496064},
-            {x = 2379.956054, y = 3160.153808, z = 48.202148, heading = 311.811036},
-            {x = 2396.980224, y = 3141.586914, z = 48.151612, heading = 246.614166},
-            {x = 2425.081298, y = 3158.729736, z = 48.202148, heading = 215.433074},
-            {x = 2433.270264, y = 3136.958252, z = 48.421264, heading = 153.070878},
-            {x = 2433.507812, y = 3117.230712, z = 48.185302, heading = 167.244094},
-            {x = 2388.237304, y = 3127.107666, z = 48.151612, heading = 226.771652},
-            {x = 2404.298828, y = 3078.896728, z = 48.151612, heading = 263.622070},
-            {x = 2408.703370, y = 3031.344970, z = 48.151612, heading = 348.661408},
-            {x = 2383.450440, y = 3027.454834, z = 48.151612, heading = 25.511812},
-            {x = 2356.615478, y = 3032.690186, z = 48.151612, heading = 59.527558},
-            {x = 2336.281250, y = 3073.358154, z = 48.151612, heading = 274.960632},
-            {x = 2424.870362, y = 3053.657226, z = 48.151612, heading = 274.960632},
-            {x = 2335.714356, y = 3044.241700, z = 48.134766, heading = 297.637786},
-            {x = 2327.485596, y = 3058.826416, z = 48.117920, heading = 96.377944},
-            {x = 2413.318604, y = 3159.257080, z = 48.185302, heading = 221.102372},
-            {x = 2434.377930, y = 3110.742920, z = 48.134766, heading = 90.708656},
-        }
-    },
-
-    ["casse_avion"] = {
-        name = "Casse Avion",
-        label = "✈️ Casse Avion",
-        battleZone = {
-            x = 2377.476806,
-            y = 3106.971436,
-            z = 48.117920,
-            radius = 150.0
-        },
-        spawnPoints = {
-            {x = 2337.454834, y = 3120.764892, z = 48.202148, heading = 127.559052},
-            {x = 2342.241700, y = 3144.593506, z = 48.202148, heading = 192.755906},
-            {x = 2348.742920, y = 3118.377930, z = 48.202148, heading = 274.960632},
-            {x = 2377.450440, y = 3104.254882, z = 48.134766, heading = 53.858268},
-            {x = 2359.424072, y = 3148.984620, z = 48.202148, heading = 351.496064},
-            {x = 2379.956054, y = 3160.153808, z = 48.202148, heading = 311.811036},
-            {x = 2396.980224, y = 3141.586914, z = 48.151612, heading = 246.614166},
-            {x = 2425.081298, y = 3158.729736, z = 48.202148, heading = 215.433074},
-            {x = 2433.270264, y = 3136.958252, z = 48.421264, heading = 153.070878},
-            {x = 2433.507812, y = 3117.230712, z = 48.185302, heading = 167.244094},
-            {x = 2388.237304, y = 3127.107666, z = 48.151612, heading = 226.771652},
-            {x = 2404.298828, y = 3078.896728, z = 48.151612, heading = 263.622070},
-            {x = 2408.703370, y = 3031.344970, z = 48.151612, heading = 348.661408},
-            {x = 2383.450440, y = 3027.454834, z = 48.151612, heading = 25.511812},
-            {x = 2356.615478, y = 3032.690186, z = 48.151612, heading = 59.527558},
-            {x = 2336.281250, y = 3073.358154, z = 48.151612, heading = 274.960632},
-            {x = 2424.870362, y = 3053.657226, z = 48.151612, heading = 274.960632},
-            {x = 2335.714356, y = 3044.241700, z = 48.134766, heading = 297.637786},
-            {x = 2327.485596, y = 3058.826416, z = 48.117920, heading = 96.377944},
-            {x = 2413.318604, y = 3159.257080, z = 48.185302, heading = 221.102372},
-            {x = 2434.377930, y = 3110.742920, z = 48.134766, heading = 90.708656},
-        }
-    }
+    -- Récompense par arme complétée
+    rewardPerWeapon = 2500
 }
 
 -- ============================================================================
@@ -386,57 +73,6 @@ Config.Weapons = {
 }
 
 -- ============================================================================
--- CONFIGURATION DU GUNGAME
--- ============================================================================
-Config.GunGame = {
-    -- Nombre de kills pour gagner (= nombre d'armes)
-    killsToWin = #Config.Weapons,
-    
-    -- Délai avant respawn après mort (en ms)
-    respawnDelay = 2000,
-    
-    -- Dégâts et équilibre
-    godmodeAfterSpawn = 3000, -- Invincibilité après spawn (ms)
-    giveAmmoPerSpawn = 500,
-    
-    -- Notification de progression
-    notifyOnKill = true,
-    notifyOnDeath = true,
-    
-    -- Récompense par arme complétée
-    rewardPerWeapon = 250
-}
-
--- ============================================================================
--- SYSTÈME DE PERSISTANCE (Stats globales)
--- ============================================================================
-Config.PersistenceType = "mysql" -- "mysql" ou "json"
-Config.DatabaseName = "gungame_players" -- Table MySQL
-
--- ============================================================================
--- UI / HUD Configuration
--- ============================================================================
-Config.HUD = {
-    enabled = true,
-    position = "bottom-right", -- "top-left", "top-right", "bottom-left", "bottom-right"
-    updateInterval = 100, -- Mise à jour du HUD en ms
-    displayDistance = 100.0 -- Distance max pour afficher le HUD
-}
-
--- ============================================================================
--- MESSAGES & LOCALIZATION
--- ============================================================================
-Config.Messages = {
-    joinGame = "Vous avez rejoint une partie GunGame",
-    nextWeapon = "Kill ! Arme suivante : ~g~%s~s~",
-    lastWeapon = "Dernière arme ! ~r~1~s~ kill manquant",
-    winner = "~r~🏆 %s~s~ a remporté la partie !",
-    gameFull = "La partie est complète (~r~%d/%d~s~)",
-    playerEliminated = "~r~%s~s~ a été éliminé par ~g~%s",
-    mapSelected = "Map sélectionnée: ~b~%s"
-}
-
--- ============================================================================
 -- AMMO & WEAPON BALANCING
 -- ============================================================================
 Config.WeaponAmmo = {
@@ -463,13 +99,48 @@ Config.WeaponAmmo = {
 }
 
 -- ============================================================================
--- PRESET 1: STYLE MILITAIRE
+-- MAPS GUNGAME (Votre configuration existante)
+-- ============================================================================
+Config.Maps = {
+    ["ballas"] = {
+        name = "Ballas",
+        label = "🟣 Ballas Territory",
+        battleZone = {
+            x = 83.261536,
+            y = -1907.393432,
+            z = 21.191894,
+            radius = 150.0
+        },
+        spawnPoints = {
+            {x = 56.254944, y = -1944.224122, z = 20.989746, heading = 311.811036},
+            {x = 102.118682, y = -1899.098876, z = 21.057128, heading = 147.401580},
+            {x = 76.048356, y = -1977.112060, z = 20.888672, heading = 323.149598},
+            {x = 129.810990, y = -1962.184570, z = 18.479126, heading = 2.834646},
+            {x = 39.810990, y = -1847.340698, z = 23.668824, heading = 311.811036},
+            -- ... (gardez tous vos spawns)
+        }
+    },
+    -- ... (gardez toutes vos autres maps)
+}
+
+-- ============================================================================
+-- UI / HUD Configuration
+-- ============================================================================
+Config.HUD = {
+    enabled = true,
+    position = "bottom-right",
+    updateInterval = 100,
+    displayDistance = 100.0
+}
+
+-- ============================================================================
+-- MINIMAP
 -- ============================================================================
 Config.Minimap = {
     showZone = true,
     blip = {
-        sprite = 437, -- Icône de pistolet
-        color = 1,    -- Rouge vif
+        sprite = 437,
+        color = 1,
         scale = 1.3,
         alpha = 255,
         flash = false,
@@ -499,225 +170,17 @@ Config.Minimap = {
 }
 
 -- ============================================================================
--- PRESET 2: STYLE DISCRET (Performance optimale)
+-- MESSAGES & LOCALIZATION
 -- ============================================================================
---[[
-Config.Minimap = {
-    showZone = true,
-    blip = {
-        sprite = 1, -- Point simple
-        color = 1,
-        scale = 0.8,
-        alpha = 200,
-        flash = false,
-        shortRange = true -- Visible seulement de près
-    },
-    radius = {
-        enabled = true,
-        color = 1,
-        alpha = 80 -- Plus transparent
-    },
-    marker = {
-        enabled = false
-    },
-    text3D = {
-        enabled = false -- Désactivé pour performance
-    },
-    distanceWarnings = {
-        enabled = false
-    }
+Config.Messages = {
+    joinGame = "Vous avez rejoint une partie GunGame",
+    nextWeapon = "Kill ! Arme suivante : ~g~%s~s~",
+    lastWeapon = "Dernière arme ! ~r~1~s~ kill manquant",
+    winner = "~r~🏆 %s~s~ a remporté la partie !",
+    gameFull = "La partie est complète (~r~%d/%d~s~)",
+    playerEliminated = "~r~%s~s~ a été éliminé par ~g~%s",
+    mapSelected = "Map sélectionnée: ~b~%s"
 }
-]]
-
--- ============================================================================
--- PRESET 3: STYLE AGRESSIF (Maximum de visuels)
--- ============================================================================
---[[
-Config.Minimap = {
-    showZone = true,
-    blip = {
-        sprite = 303, -- Skull avec viseur
-        color = 1,
-        scale = 1.5,
-        alpha = 255,
-        flash = true, -- Clignotant
-        shortRange = false
-    },
-    radius = {
-        enabled = true,
-        color = 1,
-        alpha = 150
-    },
-    marker = {
-        enabled = true, -- Marqueur 3D activé
-        type = 1,
-        color = {r = 255, g = 0, b = 0, a = 120},
-        scale = {x = 3.0, y = 3.0, z = 3.0},
-        rotate = true,
-        bobUpAndDown = true
-    },
-    text3D = {
-        enabled = true,
-        height = 30.0,
-        scale = 1.0,
-        font = 4,
-        color = {r = 255, g = 0, b = 0, a = 255}
-    },
-    distanceWarnings = {
-        enabled = true,
-        warningThreshold = 0.80,
-        criticalThreshold = 0.90,
-        checkInterval = 1000
-    }
-}
-]]
-
--- ============================================================================
--- PRESET 4: STYLE GANG WAR
--- ============================================================================
---[[
-Config.Minimap = {
-    showZone = true,
-    blip = {
-        sprite = 378, -- Gang War
-        color = 1,
-        scale = 1.2,
-        alpha = 255,
-        flash = false,
-        shortRange = false
-    },
-    radius = {
-        enabled = true,
-        color = 6, -- Rose/Violet
-        alpha = 100
-    },
-    marker = {
-        enabled = false
-    },
-    text3D = {
-        enabled = true,
-        height = 20.0,
-        scale = 0.8,
-        font = 4,
-        color = {r = 255, g = 0, b = 255, a = 255} -- Violet
-    },
-    distanceWarnings = {
-        enabled = true,
-        warningThreshold = 0.85,
-        criticalThreshold = 0.95,
-        checkInterval = 2000
-    }
-}
-]]
-
--- ============================================================================
--- PRESET 5: STYLE MINIMALISTE (Blip uniquement)
--- ============================================================================
---[[
-Config.Minimap = {
-    showZone = true,
-    blip = {
-        sprite = 437,
-        color = 1,
-        scale = 1.0,
-        alpha = 255,
-        flash = false,
-        shortRange = false
-    },
-    radius = {
-        enabled = false -- Pas de cercle
-    },
-    marker = {
-        enabled = false
-    },
-    text3D = {
-        enabled = false
-    },
-    distanceWarnings = {
-        enabled = false
-    }
-}
-]]
-
--- ============================================================================
--- PRESET 6: STYLE COMPÉTITIF (Battle Royale)
--- ============================================================================
---[[
-Config.Minimap = {
-    showZone = true,
-    blip = {
-        sprite = 605, -- Battle Zone
-        color = 5, -- Jaune
-        scale = 1.4,
-        alpha = 255,
-        flash = true,
-        shortRange = false
-    },
-    radius = {
-        enabled = true,
-        color = 5, -- Jaune
-        alpha = 100
-    },
-    marker = {
-        enabled = true,
-        type = 28, -- Cylindre avec flèche
-        color = {r = 255, g = 215, b = 0, a = 150},
-        scale = {x = 2.5, y = 2.5, z = 4.0},
-        rotate = true,
-        bobUpAndDown = false
-    },
-    text3D = {
-        enabled = true,
-        height = 35.0,
-        scale = 0.9,
-        font = 4,
-        color = {r = 255, g = 215, b = 0, a = 255} -- Or
-    },
-    distanceWarnings = {
-        enabled = true,
-        warningThreshold = 0.80,
-        criticalThreshold = 0.90,
-        checkInterval = 1500
-    }
-}
-]]
-
-
--- ============================================================================
--- SPRITES DE BLIPS DISPONIBLES
--- ============================================================================
---[[
-    1   = Point simple
-    40  = Skull (tête de mort)
-    84  = Hélicoptère
-    110 = Gun Shop
-    214 = Ambulance
-    266 = Gang
-    270 = Gang Fight
-    303 = Skull + Crosshairs
-    348 = Deathmatch
-    378 = Gang War
-    437 = Gun (icône de pistolet)
-    605 = Battle Zone
-]]
-
--- ============================================================================
--- COULEURS DE BLIPS DISPONIBLES
--- ============================================================================
---[[
-    0  = Blanc
-    1  = Rouge
-    2  = Vert
-    3  = Bleu
-    4  = Jaune clair
-    5  = Jaune
-    6  = Rose
-    18 = Orange
-    25 = Violet
-    27 = Marron
-    47 = Rose vif
-    59 = Or
-]]
 
 -- ============================================================================
 -- PERMISSIONS & COMMANDES
@@ -734,9 +197,15 @@ Config.Commands = {
 }
 
 -- ============================================================================
+-- SYSTÈME DE PERSISTANCE
+-- ============================================================================
+Config.PersistenceType = "mysql"
+Config.DatabaseName = "gungame_players"
+
+-- ============================================================================
 -- DÉVELOPPEMENT & DEBUG
 -- ============================================================================
 if Config.Debug then
-    Config.DebugZones = false -- Affiche les zones de combat
-    Config.AutoJoinGame = "ballas" -- Auto-join au démarrage (dev)
+    Config.DebugZones = false
+    Config.AutoJoinGame = false
 end
