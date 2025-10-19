@@ -1,5 +1,5 @@
 -- ============================================================================
--- GUNGAME CLIENT - Interface & Gameplay (VERSION CORRIGÉE)
+-- GUNGAME CLIENT - Interface & Gameplay (VERSION SANS ZONES)
 -- ============================================================================
 
 local playerData = {
@@ -14,7 +14,7 @@ local playerData = {
     lastSpawnPoint = nil
 }
 
-local hudVisible = false
+local hudVisible = true  -- HUD activé par défaut
 local killedEntities = {}
 
 -- ============================================================================
@@ -113,7 +113,7 @@ RegisterCommand('togglehud', function(source, args, rawCommand)
             description = 'HUD désactivé',
             type = 'inform'
         })
-        lib.hideTextUI()
+        hideGunGameHUD()
     end
 end, false)
 
@@ -364,10 +364,6 @@ function enableGodMode()
         while playerData.godMode and (GetGameTimer() - startTime) < duration do
             Wait(100)
             local remaining = math.ceil((duration - (GetGameTimer() - startTime)) / 1000)
-            lib.showTextUI('⚡ Invincible: ' .. remaining .. 's', {
-                position = 'top-center',
-                icon = 'fa-solid fa-shield'
-            })
         end
     end)
     
@@ -379,17 +375,15 @@ function enableGodMode()
 end
 
 -- ============================================================================
--- HUD IN-GAME
+-- HUD IN-GAME - VERSION DRAW TEXT NATIF
 -- ============================================================================
 
 Citizen.CreateThread(function()
     while true do
-        Wait(Config.HUD.updateInterval or 100)
+        Wait(0)
         
         if playerData.inGame and hudVisible and Config.HUD.enabled then
             drawGunGameHUD()
-        elseif not hudVisible then
-            lib.hideTextUI()
         end
     end
 end)
@@ -397,25 +391,188 @@ end)
 function drawGunGameHUD()
     local mapId = playerData.mapId
     if not mapId then return end
-    
-    local mapData = Config.Maps[mapId]
-    local kills = playerData.kills
+
+    -- Variables
+    local mapData       = Config.Maps[mapId]
+    local kills         = playerData.kills
     local currentWeapon = playerData.currentWeaponIndex
-    local maxWeapons = #Config.Weapons
-    local godMode = playerData.godMode
-    
-    local hudText = '🔫 ' .. mapData.name .. '\n'
-    hudText = hudText .. 'Arme: ' .. currentWeapon .. '/' .. maxWeapons .. '\n'
-    hudText = hudText .. 'Kills: ' .. kills .. '\n'
-    
-    if godMode then
-        hudText = hudText .. '⚡ Invincible'
+    local maxWeapons    = #Config.Weapons
+    local godMode       = playerData.godMode
+
+    -- Weapon names
+    local currentWeaponName = Config.Weapons[currentWeapon] or "Aucune"
+    local nextWeaponName    = (currentWeapon < maxWeapons and Config.Weapons[currentWeapon + 1]) or "VICTOIRE"
+    currentWeaponName       = currentWeaponName:gsub("WEAPON_", "")
+    nextWeaponName          = nextWeaponName:gsub("WEAPON_", "")
+
+    -- UI Pos & Size
+    local startX     = 0.015
+    local startY     = 0.015
+    local lineHeight = 0.027
+    local boxWidth   = 0.22
+    local boxHeight  = 0.25
+
+    -- Background
+    DrawRect(startX + boxWidth/2, startY + boxHeight/2, boxWidth, boxHeight, 0, 0, 0, 215)
+
+    -- Red Borders
+    DrawRect(startX + boxWidth/2, startY + 0.003, boxWidth, 0.002, 255, 51, 51, 255)
+    DrawRect(startX + boxWidth/2, startY + boxHeight - 0.003, boxWidth, 0.002, 255, 51, 51, 255)
+    DrawRect(startX + 0.001, startY + boxHeight/2, 0.002, boxHeight, 255, 51, 51, 255)
+    DrawRect(startX + boxWidth - 0.001, startY + boxHeight/2, 0.002, boxHeight, 255, 51, 51, 255)
+
+    local currentY = startY + 0.010
+
+    -------------------------------------
+    -- TITLE
+    -------------------------------------
+    SetTextFont(4)
+    SetTextScale(0.0, 0.42)
+    SetTextCentre(true)
+    SetTextColour(255, 51, 51, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString("◆ GUNGAME ◆")
+    DrawText(startX + boxWidth/2, currentY)
+    currentY = currentY + lineHeight - 0.004
+
+    -- MAP NAME
+    SetTextFont(0)
+    SetTextScale(0.0, 0.30)
+    SetTextCentre(true)
+    SetTextColour(255, 255, 255, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString(mapData.name)
+    DrawText(startX + boxWidth/2, currentY)
+    currentY = currentY + lineHeight
+
+    DrawRect(startX + boxWidth/2, currentY, boxWidth - 0.02, 0.001, 255, 51, 51, 200)
+    currentY = currentY + 0.015
+
+    -------------------------------------
+    -- PROGRESSION
+    -------------------------------------
+    local progress = currentWeapon / maxWeapons
+
+    SetTextFont(0)
+    SetTextScale(0.0, 0.28)
+    SetTextColour(255, 255, 255, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString("Progression")
+    DrawText(startX + 0.07, currentY + 0.002)
+
+    -- Progress bar
+    local barX      = startX + 0.013
+    local barY      = currentY + 0.013
+    local barWidth  = boxWidth - 0.065
+    local barHeight = 0.014
+
+    DrawRect(barX + barWidth/2, barY, barWidth, barHeight, 60, 60, 60, 220)
+    if progress > 0 then
+        DrawRect(barX + (barWidth * progress)/2, barY, barWidth * progress, barHeight, 255, 51, 51, 255)
     end
+
+    -- 1/20
+    SetTextFont(0)
+    SetTextScale(0.0, 0.28)
+    SetTextRightJustify(true)
+    SetTextWrap(0.0, startX + boxWidth - 0.013)
+    SetTextColour(255, 255, 255, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString(currentWeapon .. "/" .. maxWeapons)
+    DrawText(0, currentY + 0.004)
+
+    currentY = currentY + lineHeight + 0.01
+
+    -------------------------------------
+    -- CURRENT WEAPON
+    -------------------------------------
+    SetTextFont(0)
+    SetTextScale(0.0, 0.28)
+    SetTextColour(255, 255, 255, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString("📦 Actuelle")
+    DrawText(startX + 0.013, currentY)
+
+    currentY = currentY + lineHeight - 0.008
+
+    SetTextFont(4)
+    SetTextScale(0.0, 0.30)
+    SetTextColour(255, 102, 102, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString(currentWeaponName)
+    DrawText(startX + 0.028, currentY + 0.005)
+    currentY = currentY + lineHeight + 0.005
+
+    -------------------------------------
+    -- NEXT WEAPON
+    -------------------------------------
+    if currentWeapon < maxWeapons then
+        SetTextFont(0)
+        SetTextScale(0.0, 0.28)
+        SetTextColour(255, 180, 70, 255)
+        SetTextEntry("STRING")
+        AddTextComponentString("⬆️  Suivante")
+        DrawText(startX + 0.013, currentY)
+
+        currentY = currentY + lineHeight - 0.008
+
+        SetTextFont(4)
+        SetTextScale(0.0, 0.30)
+        SetTextColour(255, 204, 102, 255)
+        SetTextEntry("STRING")
+        AddTextComponentString(nextWeaponName)
+        DrawText(startX + 0.028, currentY + 0.005)
+
+        currentY = currentY + lineHeight
+    else
+        SetTextFont(4)
+        SetTextScale(0.0, 0.32)
+        SetTextCentre(true)
+        SetTextColour(255, 215, 0, 255)
+        SetTextEntry("STRING")
+        AddTextComponentString("🏆 DERNIÈRE ARME!")
+        DrawText(startX + boxWidth/2, currentY)
+        currentY = currentY + lineHeight + 0.004
+    end
+
+    -------------------------------------
+    -- KILLS
+    -------------------------------------
+    SetTextFont(0)
+    SetTextScale(0.0, 0.30)
+    SetTextColour(255, 255, 255, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString("💀 Kills:")
+    DrawText(startX + 0.013, currentY + 0.005)
+
+    SetTextFont(4)
+    SetTextScale(0.0, 0.32)
+    SetTextRightJustify(true)
+    SetTextWrap(0.0, startX + boxWidth - 0.013)
+    SetTextColour(255, 51, 51, 255)
+    SetTextEntry("STRING")
+    AddTextComponentString(tostring(kills))
+    DrawText(0, currentY + 0.005)
     
-    lib.showTextUI(hudText, {
-        position = Config.HUD.position or 'top-right',
-        icon = 'fa-solid fa-gun'
-    })
+    -- GodMode
+    if godMode then
+        -- Fond qui pulse
+        local alpha = math.floor(200 + 55 * math.sin(GetGameTimer() / 300))
+        DrawRect(startX + boxWidth/2, currentY + 0.055, boxWidth - 0.02, 0.028, 255, 215, 0, alpha)
+        
+        SetTextFont(4)
+        SetTextProportional(1)
+        SetTextScale(0.0, 0.38)
+        SetTextColour(0, 0, 0, 255)
+        SetTextEntry("STRING")
+        SetTextCentre(true)
+        AddTextComponentString("INVINCIBLE")
+        DrawText(startX + boxWidth/2, currentY + 0.04)
+    end
+end
+
+function hideGunGameHUD()
+    -- Rien à faire avec DrawText
 end
 
 -- ============================================================================
@@ -509,9 +666,11 @@ Citizen.CreateThread(function()
 end)
 
 -- ============================================================================
--- ZONES DE COMBAT
+-- ZONES DE COMBAT - DÉSACTIVÉES
 -- ============================================================================
-
+-- Les zones rouges et textes 3D ont été retirés
+-- Pour réactiver, décommentez le code ci-dessous:
+--[[
 Citizen.CreateThread(function()
     while true do
         Wait(0)
@@ -533,9 +692,10 @@ Citizen.CreateThread(function()
         end
     end
 end)
+--]]
 
 -- ============================================================================
--- ZONES DE RESPAWN
+-- ZONES DE RESPAWN - VÉRIFICATION SILENCIEUSE
 -- ============================================================================
 
 Citizen.CreateThread(function()
