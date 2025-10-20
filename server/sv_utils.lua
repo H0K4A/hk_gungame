@@ -1,12 +1,8 @@
 -- ============================================================================
-<<<<<<< HEAD
--- GUNGAME v2.0.0 - server/sv_utils.lua
--- FICHIER COMPLET ET CORRIGÉ
+-- GUNGAME v2.0.0 - server/sv_utils.lua - VERSION CORRIGÉE
 -- ============================================================================
 
 -- ============================================================================
-=======
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
 -- SPAWN SYSTEM - Gestion des spawns
 -- ============================================================================
 
@@ -18,20 +14,13 @@ function SpawnSystem.GetSpawnForPlayer(instanceId, mapId, playerId)
     local mapData = Config.Maps[mapId]
     
     if not mapData or not mapData.spawnPoints or #mapData.spawnPoints == 0 then
-<<<<<<< HEAD
-        print("^1[SpawnSystem]^7 Erreur: Aucun spawn trouve pour la map " .. mapId)
-=======
         print("^1[SpawnSystem]^7 Erreur: Aucun spawn trouvé pour la map " .. mapId)
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
         return nil
     end
     
     local spawnPoints = mapData.spawnPoints
     
-<<<<<<< HEAD
-=======
     -- Initialiser les structures si nécessaire
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
     if not instanceSpawnIndexes[instanceId] then
         instanceSpawnIndexes[instanceId] = 0
     end
@@ -155,10 +144,7 @@ function SpawnSystem.ResetInstance(instanceId)
     occupiedSpawns[instanceId] = {}
 end
 
-<<<<<<< HEAD
 -- Thread de nettoyage automatique
-=======
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
 Citizen.CreateThread(function()
     while true do
         Wait(10000)
@@ -180,16 +166,15 @@ local nextInstanceId = 1
 function InstanceManager.FindOrCreateInstance(mapId)
     -- Chercher une instance active pour cette map
     for instanceId, instance in pairs(instances) do
-        if instance.map == mapId and instance.gameActive and instance.currentPlayers < instance.maxPlayers then
+        if instance.map == mapId and 
+           instance.gameActive and 
+           instance.currentPlayers and
+           instance.currentPlayers < (Config.InstanceSystem.maxPlayersPerInstance or 20) then
             return instance
         end
     end
     
-<<<<<<< HEAD
-    -- Creer une nouvelle instance si autorise
-=======
     -- Créer une nouvelle instance si autorisé
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
     if Config.InstanceSystem.autoCreateInstance then
         local instanceId = nextInstanceId
         nextInstanceId = nextInstanceId + 1
@@ -200,22 +185,14 @@ function InstanceManager.FindOrCreateInstance(mapId)
             players = {},
             gameActive = false,
             currentPlayers = 0,
-<<<<<<< HEAD
             playersData = {},
-            maxPlayers = Config.InstanceSystem.maxPlayersPerInstance
-=======
-            playersData = {}
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
+            maxPlayers = Config.InstanceSystem.maxPlayersPerInstance or 20
         }
         
         instances[instanceId] = newInstance
         
         if Config.Debug then
-<<<<<<< HEAD
-            print(string.format("^2[InstanceManager]^7 Instance creee: %d (Map: %s)", instanceId, mapId))
-=======
             print(string.format("^2[InstanceManager]^7 Instance créée: %d (Map: %s)", instanceId, mapId))
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
         end
         
         return newInstance
@@ -252,20 +229,13 @@ function InstanceManager.RemoveInstance(instanceId)
     instances[instanceId] = nil
     
     if Config.Debug then
-<<<<<<< HEAD
-        print(string.format("^3[InstanceManager]^7 Instance %d supprimee", instanceId))
-=======
         print(string.format("^3[InstanceManager]^7 Instance %d supprimée", instanceId))
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
     end
     
     return true
 end
 
-<<<<<<< HEAD
 -- Thread de nettoyage automatique des instances vides
-=======
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
 Citizen.CreateThread(function()
     while true do
         Wait(60000)
@@ -273,7 +243,7 @@ Citizen.CreateThread(function()
         local instancesToDelete = {}
         
         for instanceId, instance in pairs(instances) do
-            if instance.currentPlayers == 0 and not instance.gameActive then
+            if (not instance.currentPlayers or instance.currentPlayers == 0) and not instance.gameActive then
                 table.insert(instancesToDelete, instanceId)
             end
         end
@@ -293,16 +263,12 @@ local rotationTimer = nil
 local currentRotationIndex = 1
 
 function MapRotation.Initialize()
-    if not Config.MapRotation.enabled then
-<<<<<<< HEAD
-        print("^1[MapRotation]^7 Systeme de rotation desactive")
-=======
+    if not Config.MapRotation or not Config.MapRotation.enabled then
         print("^1[MapRotation]^7 Système de rotation désactivé")
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
         return
     end
     
-    if #Config.MapRotation.activeMaps < 1 then
+    if not Config.MapRotation.activeMaps or #Config.MapRotation.activeMaps < 1 then
         print("^1[MapRotation]^7 ERREUR: Au moins 1 map requise")
         return
     end
@@ -312,24 +278,36 @@ function MapRotation.Initialize()
 end
 
 function MapRotation.GetCurrentMap()
+    if not Config.MapRotation or not Config.MapRotation.activeMaps then
+        return nil
+    end
     return Config.MapRotation.activeMaps[currentRotationIndex]
 end
 
 function MapRotation.GetAvailableGames()
     local games = {}
     
+    if not Config.MapRotation or not Config.MapRotation.activeMaps then
+        print("^1[MapRotation]^7 Config.MapRotation non défini")
+        return games
+    end
+    
     for _, mapId in ipairs(Config.MapRotation.activeMaps) do
         local mapData = Config.Maps[mapId]
         if mapData then
             local instance = InstanceManager.FindOrCreateInstance(mapId)
             
-            table.insert(games, {
-                mapId = mapId,
-                label = mapData.label,
-                currentPlayers = instance.currentPlayers,
-                maxPlayers = Config.InstanceSystem.maxPlayersPerInstance,
-                isActive = instance.gameActive
-            })
+            if instance then
+                table.insert(games, {
+                    mapId = mapId,
+                    label = mapData.label or mapData.name or mapId,
+                    currentPlayers = instance.currentPlayers or 0,
+                    maxPlayers = Config.InstanceSystem.maxPlayersPerInstance or 20,
+                    isActive = instance.gameActive or false
+                })
+            end
+        else
+            print("^1[MapRotation]^7 ERREUR: Map " .. mapId .. " introuvable dans Config.Maps")
         end
     end
     
@@ -337,12 +315,17 @@ function MapRotation.GetAvailableGames()
 end
 
 function MapRotation.GetRotationInfo()
-    local nextMap = Config.MapRotation.activeMaps[currentRotationIndex]
+    if not Config.MapRotation or not Config.MapRotation.activeMaps then
+        return nil
+    end
+    
+    local nextIndex = (currentRotationIndex % #Config.MapRotation.activeMaps) + 1
+    local nextMap = Config.MapRotation.activeMaps[nextIndex]
     local nextMapData = Config.Maps[nextMap]
     
     if nextMapData then
         return {
-            nextMapLabel = nextMapData.label,
+            nextMapLabel = nextMapData.label or nextMapData.name or nextMap,
             minutesUntil = 60,
             secondsUntil = 0
         }
@@ -354,6 +337,11 @@ end
 function MapRotation.StartAutoRotation()
     if rotationTimer then
         ClearTimeout(rotationTimer)
+    end
+    
+    if not Config.MapRotation or not Config.MapRotation.rotationInterval then
+        print("^1[MapRotation]^7 ERREUR: rotationInterval non défini")
+        return
     end
     
     rotationTimer = SetTimeout(Config.MapRotation.rotationInterval, function()
@@ -368,6 +356,11 @@ function MapRotation.StartAutoRotation()
 end
 
 function MapRotation.RotateToNext()
+    if not Config.MapRotation or not Config.MapRotation.activeMaps then
+        print("^1[MapRotation]^7 ERREUR: Impossible de faire la rotation")
+        return
+    end
+    
     local previousIndex = currentRotationIndex
     local previousMapId = Config.MapRotation.activeMaps[previousIndex]
     
@@ -375,17 +368,18 @@ function MapRotation.RotateToNext()
     local newMapId = Config.MapRotation.activeMaps[currentRotationIndex]
     local newMapData = Config.Maps[newMapId]
     
+    if not newMapData then
+        print("^1[MapRotation]^7 ERREUR: Nouvelle map introuvable")
+        return
+    end
+    
     print("^2[MapRotation]^7 Rotation: " .. previousMapId .. " -> " .. newMapId)
     
     TriggerClientEvent('gungame:notifyMapRotation', -1, {
-        previousMap = Config.Maps[previousMapId].label,
-        newMap = newMapData.label
+        previousMap = Config.Maps[previousMapId].label or previousMapId,
+        newMap = newMapData.label or newMapId
     })
     
-<<<<<<< HEAD
-    -- Forcer tous les joueurs a quitter
-=======
     -- Forcer tous les joueurs à quitter
->>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
     TriggerEvent('gungame:rotationForcedQuit')
 end

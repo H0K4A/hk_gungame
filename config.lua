@@ -525,10 +525,31 @@ Config.Commands = {
 }
 
 -- ============================================================================
--- SYSTÈME DE PERSISTANCE
+-- CONFIGURATION DES BLIPS JOUEURS
 -- ============================================================================
-Config.PersistenceType = "mysql"
-Config.DatabaseName = "gungame_players"
+
+Config.PlayerBlips = {
+    enabled = true, -- Activer/Désactiver les blips joueurs
+    sprite = 1, -- Sprite du blip (1 = point blanc, 2 = waypoint, etc.)
+    scale = 0.8, -- Taille du blip (0.5 = petit, 1.0 = normal, 1.5 = grand)
+    alpha = 255, -- Transparence (0 = invisible, 255 = opaque)
+    shortRange = true, -- Visible uniquement à courte distance sur la minimap
+    showName = true, -- Afficher le nom du joueur sur le blip
+    
+    -- Couleurs des blips (voir la liste complète ci-dessous)
+    enemyColor = 1, -- Rouge pour les ennemis
+    allyColor = 3, -- Bleu pour les alliés (si vous ajoutez un système de teams)
+    
+    -- Mise à jour des blips
+    updateInterval = 1000, -- Intervalle de mise à jour en ms (1000 = 1 seconde)
+    
+    -- Distance pour l'alpha dynamique
+    fadeDistance = {
+        near = 50, -- Distance proche (alpha max)
+        mid = 100, -- Distance moyenne (alpha moyen)
+        far = 200 -- Distance lointaine (alpha minimum)
+    }
+}
 
 -- ============================================================================
 -- DÉVELOPPEMENT & DEBUG
