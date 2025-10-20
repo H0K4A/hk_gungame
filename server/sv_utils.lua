@@ -1,9 +1,12 @@
 -- ============================================================================
+<<<<<<< HEAD
 -- GUNGAME v2.0.0 - server/sv_utils.lua
 -- FICHIER COMPLET ET CORRIGÉ
 -- ============================================================================
 
 -- ============================================================================
+=======
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
 -- SPAWN SYSTEM - Gestion des spawns
 -- ============================================================================
 
@@ -15,12 +18,20 @@ function SpawnSystem.GetSpawnForPlayer(instanceId, mapId, playerId)
     local mapData = Config.Maps[mapId]
     
     if not mapData or not mapData.spawnPoints or #mapData.spawnPoints == 0 then
+<<<<<<< HEAD
         print("^1[SpawnSystem]^7 Erreur: Aucun spawn trouve pour la map " .. mapId)
+=======
+        print("^1[SpawnSystem]^7 Erreur: Aucun spawn trouvé pour la map " .. mapId)
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
         return nil
     end
     
     local spawnPoints = mapData.spawnPoints
     
+<<<<<<< HEAD
+=======
+    -- Initialiser les structures si nécessaire
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
     if not instanceSpawnIndexes[instanceId] then
         instanceSpawnIndexes[instanceId] = 0
     end
@@ -144,7 +155,10 @@ function SpawnSystem.ResetInstance(instanceId)
     occupiedSpawns[instanceId] = {}
 end
 
+<<<<<<< HEAD
 -- Thread de nettoyage automatique
+=======
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
 Citizen.CreateThread(function()
     while true do
         Wait(10000)
@@ -171,7 +185,11 @@ function InstanceManager.FindOrCreateInstance(mapId)
         end
     end
     
+<<<<<<< HEAD
     -- Creer une nouvelle instance si autorise
+=======
+    -- Créer une nouvelle instance si autorisé
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
     if Config.InstanceSystem.autoCreateInstance then
         local instanceId = nextInstanceId
         nextInstanceId = nextInstanceId + 1
@@ -182,14 +200,22 @@ function InstanceManager.FindOrCreateInstance(mapId)
             players = {},
             gameActive = false,
             currentPlayers = 0,
+<<<<<<< HEAD
             playersData = {},
             maxPlayers = Config.InstanceSystem.maxPlayersPerInstance
+=======
+            playersData = {}
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
         }
         
         instances[instanceId] = newInstance
         
         if Config.Debug then
+<<<<<<< HEAD
             print(string.format("^2[InstanceManager]^7 Instance creee: %d (Map: %s)", instanceId, mapId))
+=======
+            print(string.format("^2[InstanceManager]^7 Instance créée: %d (Map: %s)", instanceId, mapId))
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
         end
         
         return newInstance
@@ -226,13 +252,20 @@ function InstanceManager.RemoveInstance(instanceId)
     instances[instanceId] = nil
     
     if Config.Debug then
+<<<<<<< HEAD
         print(string.format("^3[InstanceManager]^7 Instance %d supprimee", instanceId))
+=======
+        print(string.format("^3[InstanceManager]^7 Instance %d supprimée", instanceId))
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
     end
     
     return true
 end
 
+<<<<<<< HEAD
 -- Thread de nettoyage automatique des instances vides
+=======
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
 Citizen.CreateThread(function()
     while true do
         Wait(60000)
@@ -261,7 +294,11 @@ local currentRotationIndex = 1
 
 function MapRotation.Initialize()
     if not Config.MapRotation.enabled then
+<<<<<<< HEAD
         print("^1[MapRotation]^7 Systeme de rotation desactive")
+=======
+        print("^1[MapRotation]^7 Système de rotation désactivé")
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
         return
     end
     
@@ -270,15 +307,7 @@ function MapRotation.Initialize()
         return
     end
     
-    print("^2[MapRotation]^7 Systeme active avec " .. #Config.MapRotation.activeMaps .. " maps")
-    print("^3[MapRotation]^7 Maps actives:")
-    
-    for i, mapId in ipairs(Config.MapRotation.activeMaps) do
-        if Config.Maps[mapId] then
-            print("  " .. i .. ". " .. Config.Maps[mapId].label)
-        end
-    end
-    
+    print("^2[MapRotation]^7 Système activé avec " .. #Config.MapRotation.activeMaps .. " maps")
     MapRotation.StartAutoRotation()
 end
 
@@ -353,6 +382,10 @@ function MapRotation.RotateToNext()
         newMap = newMapData.label
     })
     
+<<<<<<< HEAD
     -- Forcer tous les joueurs a quitter
+=======
+    -- Forcer tous les joueurs à quitter
+>>>>>>> 619b6314e5cab57cc48b992377566cf009ebe327
     TriggerEvent('gungame:rotationForcedQuit')
 end

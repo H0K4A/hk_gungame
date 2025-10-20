@@ -22,6 +22,8 @@ local killedEntities = {}
 local zoneBlip = nil
 local radiusBlip = nil
 local currentZoneData = nil
+local playerBlips = {} 
+local playerEntities = {}
 
 -- ============================================================================
 -- INITIALISATION
@@ -122,9 +124,19 @@ AddEventHandler('gungame:openMenu', function()
         return
     end
     
+    -- Récupérer les infos de rotation
     local success, games = pcall(function()
         return lib.callback.await('gungame:getAvailableGames', false)
     end)
+    
+    local rotationInfo = nil
+    local rotationSuccess, rotationData = pcall(function()
+        return lib.callback.await('gungame:getRotationInfo', false)
+    end)
+    
+    if rotationSuccess and rotationData then
+        rotationInfo = rotationData
+    end
     
     if not success or not games then
         lib.notify({
@@ -141,33 +153,14 @@ AddEventHandler('gungame:openMenu', function()
     
     local options = {}
     
-    -- Afficher infos rotation si disponible
-    if rotationSuccess and rotationInfo then
-        local timeDisplay = string.format("%02d:%02d", rotationInfo.minutesUntil, rotationInfo.secondsUntil)
-        
-        table.insert(options, {
-            title = '⏱️ PROCHAINE ROTATION',
-            description = rotationInfo.nextMapLabel .. ' dans ' .. timeDisplay,
-            icon = 'fa-solid fa-clock',
-            disabled = true
-        })
-        
-        table.insert(options, {
-            title = '',
-            description = '',
-            icon = 'fa-solid fa-minus',
-            disabled = true
-        })
-    end
-    
-    -- Les maps disponibles
     for _, game in ipairs(games) do
         local isFull = game.currentPlayers >= game.maxPlayers
-        local icon = isFull and "fa-solid fa-lock" or (game.isActive and "fa-solid fa-star" or "fa-solid fa-gamepad")
+        local icon = isFull and "fa-solid fa-lock" or "fa-solid fa-gamepad"
+        local desc = ('Joueurs: %d/%d'):format(game.currentPlayers, game.maxPlayers)
         
-        local desc = string.format('Joueurs: %d/%d', game.currentPlayers, game.maxPlayers)
-        if game.isActive then desc = "🟢 ACTIVE | " .. desc end
-        if isFull then desc = desc .. ' [PLEIN]' end
+        if isFull then
+            desc = desc .. ' [PLEIN]'
+        end
         
         table.insert(options, {
             title = game.label,
@@ -179,6 +172,13 @@ AddEventHandler('gungame:openMenu', function()
             end
         })
     end
+    
+    table.insert(options, {
+        title = '',
+        description = '',
+        icon = 'fa-solid fa-minus',
+        disabled = true
+    })
     
     table.insert(options, {title = '', description = '', icon = 'fa-solid fa-minus', disabled = true})
     table.insert(options, {title = 'Fermer le menu', icon = 'fa-solid fa-xmark', onSelect = function() end})
@@ -1016,6 +1016,23 @@ end)
 -- ============================================================================
 -- NETTOYAGE
 -- ============================================================================
+
+RegisterNetEvent('gungame:notifyMapRotation')
+AddEventHandler('gungame:notifyMapRotation', function(data)
+    lib.notify({
+        title = '🔄 Changement de Map',
+        description = data.previousMap .. ' → ' .. data.newMap,
+        type = 'inform',
+        duration = 5000
+    })
+    
+    if playerData.inGame then
+        -- Forcer le départ de la partie
+        SetTimeout(2000, function()
+            TriggerEvent('gungame:leaveGame')
+        end)
+    end
+end)
 
 AddEventHandler('onClientResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end

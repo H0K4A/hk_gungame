@@ -1,8 +1,3 @@
--- ============================================================================
--- GUNGAME v2.0.0 - server/sv_main.lua (PARTIE 1/2)
--- Remplacer votre sv_main.lua actuel par ce fichier
--- ============================================================================
-
 local ESX = exports["es_extended"]:getSharedObject()
 
 local playerData = {}
@@ -17,7 +12,6 @@ AddEventHandler('onServerResourceStart', function(resourceName)
     
     print("^2[GunGame]^7 Script démarré avec succès")
     print("^2[GunGame]^7 Système de kills: " .. Config.GunGame.killsPerWeapon .. " kills par arme")
-    print("^2[GunGame]^7 Dernière arme: " .. Config.GunGame.killsForLastWeapon .. " kill(s)")
     
     if MapRotation then
         MapRotation.Initialize()
@@ -119,12 +113,10 @@ AddEventHandler('gungame:joinGame', function(mapId)
         return
     end
     
-    -- Sauvegarder et vider l'inventaire
     savePlayerInventory(source)
     exports.ox_inventory:ClearInventory(source)
     Wait(300)
     
-    -- Ajouter le joueur à l'instance
     playerData[source] = {
         instanceId = instance.id,
         kills = 0,
@@ -143,7 +135,6 @@ AddEventHandler('gungame:joinGame', function(mapId)
     instance.currentPlayers = instance.currentPlayers + 1
     instance.gameActive = true
     
-    -- Obtenir un spawn
     local spawn = SpawnSystem.GetSpawnForPlayer(instance.id, mapId, source)
     
     if not spawn then
@@ -151,23 +142,22 @@ AddEventHandler('gungame:joinGame', function(mapId)
         return
     end
     
-    -- Téléporter le joueur
     TriggerClientEvent('gungame:teleportToGame', source, instance.id, mapId, spawn)
     
-    -- Donner la première arme après un délai
     SetTimeout(800, function()
         if playerData[source] and playerData[source].instanceId == instance.id then
             giveWeaponToPlayer(source, Config.Weapons[1], instance.id, true)
         end
     end)
     
-    -- Notification
     TriggerClientEvent('ox_lib:notify', source, {
         title = 'GunGame',
         description = 'Bienvenue ! ' .. Config.GunGame.killsPerWeapon .. ' kills par arme',
         type = 'success',
         duration = 4000
     })
+    
+    updateInstancePlayerList(instance.id)
     
     if Config.Debug then
         print(string.format("^2[GunGame]^7 %s a rejoint instance %d", xPlayer.getName(), instance.id))
@@ -192,7 +182,6 @@ AddEventHandler('gungame:playerKill', function(targetSource)
     
     if not instance or not instance.gameActive then return end
     
-    -- Incrémenter les compteurs
     playerData[source].kills = playerData[source].kills + 1
     playerData[source].weaponKills = playerData[source].weaponKills + 1
     
@@ -200,12 +189,8 @@ AddEventHandler('gungame:playerKill', function(targetSource)
     local weaponKills = playerData[source].weaponKills
     local weaponsCount = #Config.Weapons
     
-    -- Déterminer kills requis
-    local killsRequired = currentWeaponIndex == weaponsCount 
-        and Config.GunGame.killsForLastWeapon 
-        or Config.GunGame.killsPerWeapon
+    local killsRequired = currentWeaponIndex == weaponsCount and Config.GunGame.killsForLastWeapon or Config.GunGame.killsPerWeapon
     
-    -- Notifications
     local killerName = ESX.GetPlayerFromId(source).getName()
     local victimName = ESX.GetPlayerFromId(targetSource).getName()
     
@@ -216,7 +201,6 @@ AddEventHandler('gungame:playerKill', function(targetSource)
         duration = 2000
     })
     
-    -- Notifier les autres joueurs
     for _, playerId in ipairs(instance.players) do
         if playerId ~= source then
             TriggerClientEvent('ox_lib:notify', playerId, {
@@ -228,7 +212,6 @@ AddEventHandler('gungame:playerKill', function(targetSource)
         end
     end
     
-    -- Vérifier progression
     if weaponKills >= killsRequired then
         if currentWeaponIndex >= weaponsCount then
             winnerDetected(source, instanceId)
@@ -264,10 +247,7 @@ end)
 function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     if not playerData[source] or not InstanceManager.GetInstance(instanceId) then return end
     
-    -- Réinitialiser compteur
     playerData[source].weaponKills = 0
-    
-    -- Nettoyer inventaire
     TriggerClientEvent('gungame:clearAllInventory', source)
     
     local currentWeapon = Config.Weapons[playerData[source].currentWeapon]:lower()
@@ -275,19 +255,16 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     
     Wait(500)
     
-    -- Mettre à jour index
     playerData[source].currentWeapon = nextWeaponIndex
     local nextWeapon = Config.Weapons[nextWeaponIndex]
     
-    -- Donner nouvelle arme
     giveWeaponToPlayer(source, nextWeapon, instanceId, false)
     
-    -- Mettre à jour le client
     TriggerClientEvent('gungame:updateWeaponIndex', source, nextWeaponIndex)
     TriggerClientEvent('gungame:resetWeaponKills', source)
     
     if Config.Debug then
-        print(string.format("^2[GunGame]^7 Joueur %d: Arme %d -> %d", source, playerData[source].currentWeapon - 1, nextWeaponIndex))
+        print(string.format("^2[GunGame]^7 Arme avancée: %d -> %d", playerData[source].currentWeapon - 1, nextWeaponIndex))
     end
 end
 
@@ -307,10 +284,8 @@ AddEventHandler('gungame:playerDeath', function()
     local instance = InstanceManager.GetInstance(instanceId)
     if not instance or not instance.gameActive then return end
     
-    -- Libérer spawn
     SpawnSystem.FreeSpawn(instanceId, source)
     
-    -- Respawn après délai
     SetTimeout(Config.GunGame.respawnDelay, function()
         if playerData[source] and playerData[source].instanceId == instanceId then
             respawnPlayerInInstance(source, instanceId)
@@ -336,6 +311,8 @@ function respawnPlayerInInstance(source, instanceId)
     TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
     TriggerClientEvent('gungame:activateGodMode', source)
     
+    updateInstancePlayerList(instanceId)
+    
     TriggerClientEvent('ox_lib:notify', source, {
         title = 'Respawn',
         description = 'Vous avez respawné',
@@ -345,7 +322,7 @@ function respawnPlayerInInstance(source, instanceId)
 end
 
 -- ============================================================================
--- GAGNANT DÉTECTÉ
+-- GAGNANT
 -- ============================================================================
 
 function winnerDetected(source, instanceId)
@@ -361,7 +338,6 @@ function winnerDetected(source, instanceId)
     
     print("^2[GunGame]^7 🏆 Gagnant: " .. xPlayer.getName())
     
-    -- Notifier tous les joueurs
     for _, playerId in ipairs(instance.players) do
         if playerData[playerId] then
             TriggerClientEvent('gungame:playerWon', playerId, xPlayer.getName(), reward)
@@ -399,14 +375,12 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     local ammo = Config.WeaponAmmo[weapon] or 500
     local weaponName = weapon:lower()
     
-    -- Vérifier si arme existe déjà
     local hasWeapon = exports.ox_inventory:GetItem(source, weaponName, nil, false)
     if hasWeapon and hasWeapon.count > 0 then
         exports.ox_inventory:RemoveItem(source, weaponName, hasWeapon.count)
         Wait(200)
     end
     
-    -- Donner l'arme
     local success = exports.ox_inventory:AddItem(source, weaponName, 1, {
         ammo = ammo,
         durability = 100
@@ -449,7 +423,6 @@ function removePlayerFromInstance(source, instanceId)
     local instance = InstanceManager.GetInstance(instanceId)
     if not instance then return end
     
-    -- Libérer spawn
     SpawnSystem.FreeSpawn(instanceId, source)
     
     -- Retirer de la liste
@@ -463,7 +436,6 @@ function removePlayerFromInstance(source, instanceId)
     instance.playersData[source] = nil
     instance.currentPlayers = math.max(0, instance.currentPlayers - 1)
     
-    -- Restaurer inventaire
     if playerInventories[source] then
         restorePlayerInventory(source, playerInventories[source])
         playerInventories[source] = nil
@@ -475,6 +447,8 @@ function removePlayerFromInstance(source, instanceId)
     if instance.currentPlayers == 0 then
         resetInstance(instanceId)
     end
+    
+    updateInstancePlayerList(instanceId)
 end
 
 -- ============================================================================
@@ -501,13 +475,11 @@ function savePlayerInventory(source)
     local allItems = exports.ox_inventory:GetInventoryItems(source)
     local itemsToSave = {}
     
-    -- Créer liste des armes GunGame
     local gungameWeapons = {}
     for _, weapon in ipairs(Config.Weapons) do
         gungameWeapons[weapon:lower()] = true
     end
     
-    -- Sauvegarder items sauf armes GunGame
     if allItems then
         for _, item in ipairs(allItems) do
             if not gungameWeapons[item.name:lower()] then
@@ -541,32 +513,33 @@ function restorePlayerInventory(source, inventory)
 end
 
 -- ============================================================================
--- ROTATION FORCÉE
+-- MISE À JOUR DE LA LISTE DES JOUEURS
 -- ============================================================================
 
-RegisterNetEvent('gungame:rotationForcedQuit')
-AddEventHandler('gungame:rotationForcedQuit', function()
-    local affectedPlayers = {}
+function updateInstancePlayerList(instanceId)
+    local instance = InstanceManager.GetInstance(instanceId)
     
-    for source, data in pairs(playerData) do
-        if data and data.instanceId then
-            table.insert(affectedPlayers, source)
-        end
+    if not instance then return end
+    
+    local playersList = {}
+    for _, serverId in ipairs(instance.players) do
+        table.insert(playersList, serverId)
     end
     
-    print("^2[GunGame]^7 Expulsion de " .. #affectedPlayers .. " joueur(s) pour rotation")
-    
-    for _, source in ipairs(affectedPlayers) do
-        local data = playerData[source]
-        if data then
-            local instanceId = data.instanceId
-            
-            -- Restaurer inventaire
-            if playerInventories[source] then
-                SetTimeout(500, function()
-                    restorePlayerInventory(source, playerInventories[source])
-                    playerInventories[source] = nil
-                end)
+    for _, serverId in ipairs(instance.players) do
+        if serverId > 0 then
+            TriggerClientEvent('gungame:updatePlayerList', serverId, playersList)
+        end
+    end
+end
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(2000)
+        
+        for _, instance in pairs(InstanceManager.GetActiveInstances()) do
+            if #instance.players > 0 then
+                updateInstancePlayerList(instance.id)
             end
             
             SpawnSystem.FreeSpawn(instanceId, source)
@@ -600,38 +573,93 @@ AddEventHandler('gungame:playerEnteredInstance', function(instanceId, mapId)
     end
 end)
 
+RegisterNetEvent('gungame:rotationForcedQuit')
+AddEventHandler('gungame:rotationForcedQuit', function()
+    -- Forcer tous les joueurs à quitter leurs instances
+    local affectedPlayers = {}
+    
+    for source, data in pairs(playerData) do
+        if data and data.instanceId then
+            table.insert(affectedPlayers, source)
+        end
+    end
+    
+    print("^2[GunGame]^7 Expulsion de " .. #affectedPlayers .. " joueur(s) pour rotation")
+    
+    for _, source in ipairs(affectedPlayers) do
+        local data = playerData[source]
+        if data then
+            local instanceId = data.instanceId
+            
+            -- Restaurer l'inventaire
+            if playerInventories[source] then
+                SetTimeout(500, function()
+                    restorePlayerInventory(source, playerInventories[source])
+                    playerInventories[source] = nil
+                end)
+            end
+            
+            -- Supprimer du spawn system
+            if SpawnSystem then
+                SpawnSystem.FreeSpawn(instanceId, source)
+            end
+            
+            -- Notifier le joueur
+            TriggerClientEvent('ox_lib:notify', source, {
+                title = '🔄 Rotation de Map',
+                description = 'La map va changer, veuillez quitter',
+                type = 'warning',
+                duration = 4000
+            })
+            
+            -- Laisser le client faire le nettoyage
+            TriggerClientEvent('gungame:clientRotationForceQuit', source)
+            
+            -- Supprimer du serveur après 1 seconde
+            SetTimeout(1000, function()
+                if playerData[source] then
+                    removePlayerFromInstance(source, instanceId)
+                end
+            end)
+        end
+    end
+end)
+
 -- ============================================================================
 -- CALLBACKS
 -- ============================================================================
 
-lib.callback.register('gungame:getAvailableGames', function(source)
-    if Config.MapRotation.enabled and MapRotation then
-        return MapRotation.GetAvailableGames()
-    else
-        local games = {}
-        
-        for mapId, mapData in pairs(Config.Maps) do
-            local instance = InstanceManager.FindOrCreateInstance(mapId)
+function RegisterGunGameCallbacks()
+    lib.callback.register('gungame:getAvailableGames', function(source)
+        -- Utiliser le système de rotation s'il est activé
+        if Config.MapRotation.enabled and MapRotation then
+            return MapRotation.GetAvailableGames()
+        else
+            -- Fallback: afficher toutes les maps
+            local games = {}
             
-            table.insert(games, {
-                mapId = mapId,
-                label = mapData.label,
-                currentPlayers = instance.currentPlayers,
-                maxPlayers = Config.InstanceSystem.maxPlayersPerInstance,
-                isActive = instance.gameActive
-            })
+            for mapId, mapData in pairs(Config.Maps) do
+                local instance = findOrCreateInstance(mapId)
+                
+                table.insert(games, {
+                    mapId = mapId,
+                    label = mapData.label,
+                    currentPlayers = instance.currentPlayers,
+                    maxPlayers = Config.InstanceSystem.maxPlayersPerInstance
+                })
+            end
+            
+            return games
         end
-        
-        return games
-    end
-end)
-
-lib.callback.register('gungame:getRotationInfo', function(source)
-    if Config.MapRotation.enabled and MapRotation then
-        return MapRotation.GetRotationInfo()
-    end
-    return nil
-end)
+    end)
+    
+    lib.callback.register('gungame:getRotationInfo', function(source)
+        if Config.MapRotation.enabled and MapRotation then
+            return MapRotation.GetRotationInfo()
+        end
+        return nil
+    end)
+end
 
 -- ============================================================================
 -- COMMANDES DEBUG
