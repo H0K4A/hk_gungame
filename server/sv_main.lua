@@ -22,6 +22,15 @@ AddEventHandler('onServerResourceStart', function(resourceName)
     print("^2[GunGame]^7 Système de kills: " .. Config.GunGame.killsPerWeapon .. " kills par arme")
     print("^2[GunGame]^7 Dernière arme: " .. Config.GunGame.killsForLastWeapon .. " kill(s)")
     loadPlayerStatistics()
+    
+    -- Initialiser le système de rotation
+    if MapRotation then
+        MapRotation.Initialize()
+        RegisterMapRotationCallbacks()
+        RegisterGunGameCallbacks()
+    else
+        print("^1[GunGame]^7 ERREUR: MapRotation non trouvé!")
+    end
 end)
 
 -- ============================================================================
@@ -486,6 +495,13 @@ function winnerDetected(source, instanceId)
     
     savePlayerStatistics(source)
     resetInstance(instanceId)
+     
+    if Config.MapRotation.enabled and Config.MapRotation.rotateOnVictory then
+        SetTimeout(5000, function()
+            print("^2[GunGame]^7 Rotation déclenchée après victoire")
+            MapRotation.RotateToNext("victory")
+        end)
+    end
 end
 
 -- ============================================================================
@@ -750,6 +766,58 @@ AddEventHandler('gungame:playerEnteredInstance', function(instanceId, mapId)
     end
 end)
 
+RegisterNetEvent('gungame:rotationForcedQuit')
+AddEventHandler('gungame:rotationForcedQuit', function()
+    -- Forcer tous les joueurs à quitter leurs instances
+    local affectedPlayers = {}
+    
+    for source, data in pairs(playerData) do
+        if data and data.instanceId then
+            table.insert(affectedPlayers, source)
+        end
+    end
+    
+    print("^2[GunGame]^7 Expulsion de " .. #affectedPlayers .. " joueur(s) pour rotation")
+    
+    for _, source in ipairs(affectedPlayers) do
+        local data = playerData[source]
+        if data then
+            local instanceId = data.instanceId
+            
+            -- Restaurer l'inventaire
+            if playerInventories[source] then
+                SetTimeout(500, function()
+                    restorePlayerInventory(source, playerInventories[source])
+                    playerInventories[source] = nil
+                end)
+            end
+            
+            -- Supprimer du spawn system
+            if SpawnSystem then
+                SpawnSystem.FreeSpawn(instanceId, source)
+            end
+            
+            -- Notifier le joueur
+            TriggerClientEvent('ox_lib:notify', source, {
+                title = '🔄 Rotation de Map',
+                description = 'La map va changer, veuillez quitter',
+                type = 'warning',
+                duration = 4000
+            })
+            
+            -- Laisser le client faire le nettoyage
+            TriggerClientEvent('gungame:clientRotationForceQuit', source)
+            
+            -- Supprimer du serveur après 1 seconde
+            SetTimeout(1000, function()
+                if playerData[source] then
+                    removePlayerFromInstance(source, instanceId)
+                end
+            end)
+        end
+    end
+end)
+
 -- ============================================================================
 -- PERSISTANCE DES DONNÉES
 -- ============================================================================
@@ -771,22 +839,37 @@ end
 -- CALLBACKS
 -- ============================================================================
 
-lib.callback.register('gungame:getAvailableGames', function(source)
-    local games = {}
+function RegisterGunGameCallbacks()
+    lib.callback.register('gungame:getAvailableGames', function(source)
+        -- Utiliser le système de rotation s'il est activé
+        if Config.MapRotation.enabled and MapRotation then
+            return MapRotation.GetAvailableGames()
+        else
+            -- Fallback: afficher toutes les maps
+            local games = {}
+            
+            for mapId, mapData in pairs(Config.Maps) do
+                local instance = findOrCreateInstance(mapId)
+                
+                table.insert(games, {
+                    mapId = mapId,
+                    label = mapData.label,
+                    currentPlayers = instance.currentPlayers,
+                    maxPlayers = Config.InstanceSystem.maxPlayersPerInstance
+                })
+            end
+            
+            return games
+        end
+    end)
     
-    for mapId, mapData in pairs(Config.Maps) do
-        local instance = findOrCreateInstance(mapId)
-        
-        table.insert(games, {
-            mapId = mapId,
-            label = mapData.label,
-            currentPlayers = instance.currentPlayers,
-            maxPlayers = Config.InstanceSystem.maxPlayersPerInstance
-        })
-    end
-    
-    return games
-end)
+    lib.callback.register('gungame:getRotationInfo', function(source)
+        if Config.MapRotation.enabled and MapRotation then
+            return MapRotation.GetRotationInfo()
+        end
+        return nil
+    end)
+end
 
 -- ============================================================================
 -- COMMANDES ADMIN / DEBUG

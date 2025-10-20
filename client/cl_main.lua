@@ -136,9 +136,19 @@ AddEventHandler('gungame:openMenu', function()
         return
     end
     
+    -- Récupérer les infos de rotation
     local success, games = pcall(function()
         return lib.callback.await('gungame:getAvailableGames', false)
     end)
+    
+    local rotationInfo = nil
+    local rotationSuccess, rotationData = pcall(function()
+        return lib.callback.await('gungame:getRotationInfo', false)
+    end)
+    
+    if rotationSuccess and rotationData then
+        rotationInfo = rotationData
+    end
     
     if not success or not games then
         lib.notify({
@@ -151,10 +161,42 @@ AddEventHandler('gungame:openMenu', function()
     
     local options = {}
     
+    -- Afficher les infos de rotation si disponibles
+    if rotationInfo then
+        local timeDisplay = string.format("%02d:%02d", rotationInfo.minutesUntil, rotationInfo.secondsUntil)
+        
+        table.insert(options, {
+            title = '⏱️ PROCHAINE ROTATION',
+            description = rotationInfo.nextMapLabel .. ' dans ' .. timeDisplay,
+            icon = 'fa-solid fa-clock',
+            disabled = true
+        })
+        
+        table.insert(options, {
+            title = '',
+            description = '',
+            icon = 'fa-solid fa-minus',
+            disabled = true
+        })
+    end
+    
+    -- Les maps disponibles
     for _, game in ipairs(games) do
         local isFull = game.currentPlayers >= game.maxPlayers
-        local icon = isFull and "fa-solid fa-lock" or "fa-solid fa-gamepad"
+        local isActive = game.isActive
+        
+        local icon = "fa-solid fa-gamepad"
+        if isFull then
+            icon = "fa-solid fa-lock"
+        elseif isActive then
+            icon = "fa-solid fa-star"
+        end
+        
         local desc = ('Joueurs: %d/%d'):format(game.currentPlayers, game.maxPlayers)
+        
+        if isActive then
+            desc = "🟢 ACTIVE | " .. desc
+        end
         
         if isFull then
             desc = desc .. ' [PLEIN]'
@@ -170,6 +212,13 @@ AddEventHandler('gungame:openMenu', function()
             end
         })
     end
+    
+    table.insert(options, {
+        title = '',
+        description = '',
+        icon = 'fa-solid fa-minus',
+        disabled = true
+    })
     
     table.insert(options, {
         title = 'Fermer le menu',
@@ -1137,36 +1186,6 @@ Citizen.CreateThread(function()
     end
 end)
 
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        
-        if playerData.inGame then
-            for serverId, ped in pairs(playerEntities) do
-                if DoesEntityExist(ped) then
-                    local playerName = GetPlayerName(GetPlayerFromServerId(serverId))
-                    local health = GetEntityHealth(ped)
-                    
-                    -- Calculer la distance
-                    local playerCoords = GetEntityCoords(PlayerPedId())
-                    local targetCoords = GetEntityCoords(ped)
-                    local distance = #(playerCoords - targetCoords)
-                    
-                    -- Afficher le nom seulement si proche (optimisation)
-                    if distance < 150 then
-                        DrawText3DZone(
-                            targetCoords.x, 
-                            targetCoords.y, 
-                            targetCoords.z + 1.2,
-                            "~b~" .. playerName .. "~s~ (" .. math.floor(distance) .. "m)"
-                        )
-                    end
-                end
-            end
-        end
-    end
-end)
-
 -- ============================================================================
 -- NOTIFICATION SONORE AUX LIMITES
 -- ============================================================================
@@ -1320,6 +1339,23 @@ end)
 -- ============================================================================
 -- NETTOYAGE
 -- ============================================================================
+
+RegisterNetEvent('gungame:notifyMapRotation')
+AddEventHandler('gungame:notifyMapRotation', function(data)
+    lib.notify({
+        title = '🔄 Changement de Map',
+        description = data.previousMap .. ' → ' .. data.newMap,
+        type = 'inform',
+        duration = 5000
+    })
+    
+    if playerData.inGame then
+        -- Forcer le départ de la partie
+        SetTimeout(2000, function()
+            TriggerEvent('gungame:leaveGame')
+        end)
+    end
+end)
 
 AddEventHandler('onClientResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
