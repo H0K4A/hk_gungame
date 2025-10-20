@@ -1,9 +1,13 @@
+-- ============================================================================
+-- GUNGAME v2.0.0 - fxmanifest.lua
+-- ============================================================================
+
 fx_version 'cerulean'
 game 'gta5'
 
 author 'Hoka'
 description 'GunGame avec système d\'instance et rotation de spawns multiples.'
-version '1.1.7'
+version '2.0.0'
 lua54 'yes'
 
 shared_scripts {
@@ -13,9 +17,10 @@ shared_scripts {
 }
 
 client_scripts {
-    "client/*.lua"
+    'client/cl_main.lua'
 }
 
 server_scripts {
-    "server/*.lua"
+    'server/sv_utils.lua',
+    'server/sv_main.lua'
 }
