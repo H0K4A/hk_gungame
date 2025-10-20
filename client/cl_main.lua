@@ -20,6 +20,8 @@ local killedEntities = {}
 local zoneBlip = nil
 local radiusBlip = nil
 local currentZoneData = nil
+local playerBlips = {} 
+local playerEntities = {}
 
 -- ============================================================================
 -- INITIALISATION
@@ -272,6 +274,7 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     
     enableGodMode()
     createGunGameZoneBlip(mapId)
+    TriggerServerEvent('gungame:playerEnteredInstance', instanceId, mapId)
     
     lib.notify({
         title = 'GunGame',
@@ -1008,69 +1011,158 @@ Citizen.CreateThread(function()
 end)
 
 -- ============================================================================
--- BLIP DES AUTRES JOUEURS DE LA PARTIE
+-- CRÉATION D'UN BLIP POUR UN JOUEUR
 -- ============================================================================
 
--- Afficher les autres joueurs de votre instance sur la minimap
-
-local playerBlips = {}
-
-function createPlayerBlip(playerId)
-    if playerBlips[playerId] then return end
+function createPlayerBlip(serverId)
+    if playerBlips[serverId] then 
+        return 
+    end
     
-    local ped = GetPlayerPed(GetPlayerFromServerId(playerId))
-    if not DoesEntityExist(ped) then return end
+    -- Obtenir le joueur par son Server ID
+    local player = GetPlayerFromServerId(serverId)
+    if player == -1 or not DoesEntityExist(GetPlayerPed(player)) then 
+        return 
+    end
     
+    local ped = GetPlayerPed(player)
+    local playerName = GetPlayerName(player)
+    
+    -- Créer le blip
     local blip = AddBlipForEntity(ped)
-    SetBlipSprite(blip, 1)
-    SetBlipColour(blip, 3) -- Bleu pour alliés
+    SetBlipSprite(blip, 227) -- Sprite du joueur GTA
+    SetBlipColour(blip, 3) -- Bleu pour les alliés
     SetBlipScale(blip, 0.8)
-    SetBlipAsShortRange(blip, true)
+    SetBlipAsShortRange(blip, false)
+    SetBlipRoute(blip, false)
     
+    -- Ajouter un label au blip
     BeginTextCommandSetBlipName("STRING")
-    AddTextComponentString("Joueur GG")
+    AddTextComponentString(playerName)
     EndTextCommandSetBlipName(blip)
     
-    playerBlips[playerId] = blip
+    -- Sauvegarder
+    playerBlips[serverId] = blip
+    playerEntities[serverId] = ped
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Blip créé pour %s (ID: %d)", playerName, serverId))
+    end
 end
 
-function removePlayerBlip(playerId)
-    if playerBlips[playerId] then
-        RemoveBlip(playerBlips[playerId])
-        playerBlips[playerId] = nil
+function removePlayerBlip(serverId)
+    if playerBlips[serverId] then
+        RemoveBlip(playerBlips[serverId])
+        playerBlips[serverId] = nil
+    end
+    
+    playerEntities[serverId] = nil
+    
+    if Config.Debug then
+        print(string.format("^3[GunGame]^7 Blip supprimé pour joueur %d", serverId))
     end
 end
 
 function removeAllPlayerBlips()
-    for playerId, blip in pairs(playerBlips) do
-        RemoveBlip(blip)
+    for serverId, blip in pairs(playerBlips) do
+        if blip then
+            RemoveBlip(blip)
+        end
     end
     playerBlips = {}
+    playerEntities = {}
+    
+    if Config.Debug then
+        print("^3[GunGame]^7 Tous les blips supprimés")
+    end
 end
 
 -- Event à recevoir du serveur avec la liste des joueurs
 RegisterNetEvent('gungame:updatePlayerList')
 AddEventHandler('gungame:updatePlayerList', function(players)
-    if not playerData.inGame then return end
+    if not playerData.inGame then 
+        return 
+    end
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Mise à jour liste joueurs: %d joueurs", #players))
+    end
     
     -- Supprimer les blips des joueurs qui ont quitté
-    for playerId, _ in pairs(playerBlips) do
+    for serverId, _ in pairs(playerBlips) do
         local found = false
+        
         for _, pid in ipairs(players) do
-            if pid == playerId then
+            if pid == serverId then
                 found = true
                 break
             end
         end
+        
         if not found then
-            removePlayerBlip(playerId)
+            removePlayerBlip(serverId)
         end
     end
     
     -- Créer les blips des nouveaux joueurs
-    for _, playerId in ipairs(players) do
-        if playerId ~= GetPlayerServerId(PlayerId()) then
-            createPlayerBlip(playerId)
+    for _, serverId in ipairs(players) do
+        if serverId ~= GetPlayerServerId(PlayerId()) then
+            if not playerBlips[serverId] then
+                createPlayerBlip(serverId)
+            end
+        end
+    end
+end)
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(500)
+        
+        if playerData.inGame then
+            -- Vérifier que les entités des blips existent toujours
+            for serverId, ped in pairs(playerEntities) do
+                if not DoesEntityExist(ped) then
+                    -- L'entité a disparu, retirer le blip
+                    removePlayerBlip(serverId)
+                    
+                    -- Essayer de le recréer
+                    local player = GetPlayerFromServerId(serverId)
+                    if player ~= -1 and DoesEntityExist(GetPlayerPed(player)) then
+                        Wait(100)
+                        createPlayerBlip(serverId)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(0)
+        
+        if playerData.inGame then
+            for serverId, ped in pairs(playerEntities) do
+                if DoesEntityExist(ped) then
+                    local playerName = GetPlayerName(GetPlayerFromServerId(serverId))
+                    local health = GetEntityHealth(ped)
+                    
+                    -- Calculer la distance
+                    local playerCoords = GetEntityCoords(PlayerPedId())
+                    local targetCoords = GetEntityCoords(ped)
+                    local distance = #(playerCoords - targetCoords)
+                    
+                    -- Afficher le nom seulement si proche (optimisation)
+                    if distance < 150 then
+                        DrawText3DZone(
+                            targetCoords.x, 
+                            targetCoords.y, 
+                            targetCoords.z + 1.2,
+                            "~b~" .. playerName .. "~s~ (" .. math.floor(distance) .. "m)"
+                        )
+                    end
+                end
+            end
         end
     end
 end)
@@ -1210,6 +1302,21 @@ Citizen.CreateThread(function()
     end
 end)
 
+-- Export pour que d'autres scripts sachent si le joueur est en GunGame
+exports('isPlayerInGunGame', function()
+    return playerData.inGame
+end)
+
+-- Export pour obtenir l'instance ID
+exports('getGunGameInstanceId', function()
+    return playerData.inGame and playerData.instanceId or nil
+end)
+
+-- Export pour obtenir la map actuelle
+exports('getGunGameMapId', function()
+    return playerData.inGame and playerData.mapId or nil
+end)
+
 -- ============================================================================
 -- NETTOYAGE
 -- ============================================================================
@@ -1218,6 +1325,7 @@ AddEventHandler('onClientResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
 
     removeGunGameZoneBlip()
+    removeAllPlayerBlips()
     
     if playerData.inGame then
         RemoveAllPedWeapons(PlayerPedId(), true)
@@ -1227,6 +1335,7 @@ end)
 
 AddEventHandler('playerDropped', function(reason)
     removeGunGameZoneBlip()
+    removeAllPlayerBlips()
     playerData.inGame = false
     lib.hideTextUI()
 end)

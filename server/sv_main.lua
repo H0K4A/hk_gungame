@@ -9,6 +9,7 @@ local instances = {} -- {[instanceId] = {id, map, players, gameActive, playersDa
 local playerData = {} -- {[source] = {instanceId, kills, currentWeapon, totalKills}}
 local playerInventories = {} -- {[source] = {items}} - Sauvegarde des inventaires
 local nextInstanceId = 1
+local instancePlayers = {}
 
 -- ============================================================================
 -- INITIALISATION
@@ -126,6 +127,7 @@ AddEventHandler('gungame:joinGame', function(mapId)
     }
     
     table.insert(instance.players, source)
+    onPlayerJoinedInstance(source, instance.id)
     instance.playersData[source] = {
         kills = 0,
         currentWeapon = 1,
@@ -434,6 +436,7 @@ function respawnPlayerInInstance(source, instanceId)
     TriggerClientEvent('gungame:teleportBeforeRevive', source, spawn)
     TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
     TriggerClientEvent('gungame:activateGodMode', source)
+    updateInstancePlayerList(instanceId)
     TriggerClientEvent('ox_lib:notify', source, {
         title = 'Respawn',
         description = 'Vous avez respawné',
@@ -578,6 +581,7 @@ function removePlayerFromInstance(source, instanceId)
     if instance.currentPlayers == 0 then
         resetInstance(instanceId)
     end
+    onPlayerLeftInstance(instanceId)
 end
 
 -- ============================================================================
@@ -623,51 +627,63 @@ end
 -- UPDATE PLAYERS LISTS
 -- ============================================================================
 
-local gungamePlayers = {} -- { [playerId] = mapId }
-
--- Envoie la liste des joueurs de la même map à tous les joueurs concernés
-local function updatePlayerLists(mapId)
-    local players = {}
-
-    -- On récupère les joueurs qui sont sur la même carte
-    for pid, mid in pairs(gungamePlayers) do
-        if mid == mapId then
-            table.insert(players, pid)
-        end
+function updateInstancePlayerList(instanceId)
+    local instance = instances[instanceId]
+    
+    if not instance then 
+        return 
     end
-
-    -- On renvoie cette liste à tous les joueurs de la même map
-    for pid, mid in pairs(gungamePlayers) do
-        if mid == mapId then
-            TriggerClientEvent('gungame:updatePlayerList', pid, players)
+    
+    -- Créer la liste des Server IDs
+    local playersList = {}
+    for _, serverId in ipairs(instance.players) do
+        table.insert(playersList, serverId)
+    end
+    
+    -- Envoyer la mise à jour à TOUS les joueurs de cette instance
+    for _, serverId in ipairs(instance.players) do
+        if serverId > 0 then
+            TriggerClientEvent('gungame:updatePlayerList', serverId, playersList)
         end
     end
 end
 
--- ✅ Le joueur rejoint la GunGame
-RegisterNetEvent('gungame:joinGame', function(mapId)
-    local src = source
-    gungamePlayers[src] = mapId
-    updatePlayerLists(mapId)
-end)
-
--- ✅ Le joueur quitte la GunGame
-RegisterNetEvent('gungame:leaveGame', function()
-    local src = source
-    local mapId = gungamePlayers[src]
-    if mapId then
-        gungamePlayers[src] = nil
-        updatePlayerLists(mapId)
+function onPlayerJoinedInstance(source, instanceId)
+    if not instances[instanceId] then 
+        return 
     end
-end)
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Joueur %d a rejoint l'instance %d", source, instanceId))
+    end
+    
+    -- Mettre à jour la liste pour TOUS les joueurs de cette instance
+    updateInstancePlayerList(instanceId)
+end
 
--- ✅ Si crash / déco → on le retire
-AddEventHandler('playerDropped', function()
-    local src = source
-    local mapId = gungamePlayers[src]
-    if mapId then
-        gungamePlayers[src] = nil
-        updatePlayerLists(mapId)
+function onPlayerLeftInstance(instanceId)
+    if not instances[instanceId] then 
+        return 
+    end
+    
+    if Config.Debug then
+        print(string.format("^3[GunGame]^7 Un joueur a quitté l'instance %d", instanceId))
+    end
+    
+    -- Mettre à jour la liste pour les joueurs restants
+    updateInstancePlayerList(instanceId)
+end
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(2000) -- Mise à jour toutes les 2 secondes
+        
+        -- Parcourir toutes les instances actives
+        for instanceId, instance in pairs(instances) do
+            if instance.gameActive and #instance.players > 0 then
+                updateInstancePlayerList(instanceId)
+            end
+        end
     end
 end)
 
@@ -725,6 +741,14 @@ function savePlayerInventory(source)
     
     playerInventories[source] = { items = itemsToSave }
 end
+
+RegisterNetEvent('gungame:playerEnteredInstance')
+AddEventHandler('gungame:playerEnteredInstance', function(instanceId, mapId)
+    -- Signal que le joueur a rejoint une instance GunGame
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Joueur entré dans instance %d (Map: %s)", instanceId, mapId))
+    end
+end)
 
 -- ============================================================================
 -- PERSISTANCE DES DONNÉES
