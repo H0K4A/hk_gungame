@@ -462,9 +462,9 @@ function drawGunGameHUD()
     currentY = currentY + lineHeight - 0.008
     
     local killBarX = startX + 0.013
-    local killBarY = currentY + 0.006
-    local killBarWidth = boxWidth - 0.026
-    local killBarHeight = 0.012
+    local killBarY = currentY + 0.013
+    local killBarWidth = boxWidth - 0.065
+    local killBarHeight = 0.014
     
     local killProgress = weaponKills / killsRequired
     
