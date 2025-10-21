@@ -1,9 +1,3 @@
--- ============================================================================
--- GUNGAME v2.0.0 - client/cl_main.lua (PARTIE 1/3)
--- Remplacer votre cl_main.lua actuel
--- SUPPRESSIONS: playerBlips, playerEntities, createPlayerBlip, etc.
--- ============================================================================
-
 local playerData = {
     inGame = false,
     instanceId = nil,
@@ -29,23 +23,6 @@ local killCooldown = 1000 -- 1 seconde entre chaque kill
 local trackedEntities = {}
 
 -- ============================================================================
--- INITIALISATION
--- ============================================================================
-
-AddEventHandler('onClientResourceStart', function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then return end
-    
-    print("^2[GunGame Client]^7 Script démarré")
-    
-    if not lib then
-        print("^1[GunGame Client]^7 ERREUR: ox_lib n'est pas chargé!")
-        return
-    end
-    
-    print("^2[GunGame Client]^7 ox_lib détecté")
-end)
-
--- ============================================================================
 -- COMMANDES
 -- ============================================================================
 
@@ -57,7 +34,6 @@ end, false)
 -- NETTOYAGE À LA SORTIE DU JEU
 -- ============================================================================
 
--- Modifier l'événement leavegame existant pour ajouter:
 RegisterCommand('leavegame', function()
     if playerData.inGame then
         local ped = PlayerPedId()
@@ -73,7 +49,7 @@ RegisterCommand('leavegame', function()
         RemoveAllPedWeapons(ped, true)
         lib.hideTextUI()
         removeGunGameZoneBlip()
-        RemoveAllPlayerBlips() -- AJOUTER CETTE LIGNE
+        RemoveAllPlayerBlips()
         
         if lastSpawn then
             SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, false)
@@ -124,7 +100,6 @@ end)
 
 RegisterNetEvent('gungame:openMenu')
 AddEventHandler('gungame:openMenu', function()
-    print("^2[GunGame Client]^7 Ouverture du menu...") -- DEBUG
     
     if not lib then
         print("^1[GunGame Client]^7 ERREUR: ox_lib n'est pas chargé!")
@@ -146,8 +121,6 @@ AddEventHandler('gungame:openMenu', function()
         return
     end
     
-    print("^2[GunGame Client]^7 Récupération des parties disponibles...") -- DEBUG
-    
     -- Récupérer les parties disponibles
     lib.callback('gungame:getAvailableGames', false, function(games)
         if not games then
@@ -159,8 +132,6 @@ AddEventHandler('gungame:openMenu', function()
             })
             return
         end
-        
-        print("^2[GunGame Client]^7 " .. #games .. " partie(s) trouvée(s)") -- DEBUG
         
         local options = {}
         
@@ -180,7 +151,6 @@ AddEventHandler('gungame:openMenu', function()
                 icon = icon,
                 disabled = isFull,
                 onSelect = function()
-                    print("^2[GunGame Client]^7 Tentative de rejoindre: " .. game.mapId) -- DEBUG
                     TriggerServerEvent('gungame:joinGame', game.mapId)
                 end
             })
@@ -198,12 +168,7 @@ AddEventHandler('gungame:openMenu', function()
         table.insert(options, {
             title = 'Fermer le menu',
             icon = 'fa-solid fa-xmark',
-            onSelect = function()
-                print("^2[GunGame Client]^7 Menu fermé")
-            end
         })
-        
-        print("^2[GunGame Client]^7 Enregistrement du contexte...") -- DEBUG
         
         -- Enregistrer et afficher le menu
         lib.registerContext({
@@ -212,9 +177,7 @@ AddEventHandler('gungame:openMenu', function()
             options = options
         })
         
-        print("^2[GunGame Client]^7 Affichage du contexte...") -- DEBUG
         lib.showContext('gungame_main_menu')
-        print("^2[GunGame Client]^7 Menu affiché!") -- DEBUG
     end)
 end)
 
@@ -226,10 +189,6 @@ RegisterNetEvent('gungame:equipWeapon')
 AddEventHandler('gungame:equipWeapon', function(weapon)
     local ped = PlayerPedId()
     local weaponHash = GetHashKey(weapon)
-    
-    if Config.Debug then
-        print(string.format("^2[GunGame Client]^7 Équipement: %s", weapon))
-    end
     
     Wait(500)
     TriggerServerEvent('ox_inventory:useItem', weapon:lower(), nil)
@@ -277,10 +236,8 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     playerData.instanceId = instanceId
     playerData.mapId = mapId
     playerData.kills = 0
-    playerData.weaponKills = 0  -- IMPORTANT: Initialiser à 0
+    playerData.weaponKills = 0
     playerData.currentWeaponIndex = 1
-    
-    print("^2[GunGame]^7 Initialisation: weaponKills = 0")
     
     local spawnPoint = spawn or Config.Maps[mapId].spawnPoints[1]
     
@@ -603,44 +560,44 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
     end
 end)
 
-Citizen.CreateThread(function()
-    while true do
-        Wait(500) -- Vérifier toutes les 500ms
+-- Citizen.CreateThread(function()
+--     while true do
+--         Wait(500)
         
-        if playerData.inGame then
-            local playerPed = PlayerPedId()
-            local playerCoords = GetEntityCoords(playerPed)
+--         if playerData.inGame then
+--             local playerPed = PlayerPedId()
+--             local playerCoords = GetEntityCoords(playerPed)
             
-            -- Scanner les peds proches
-            local nearbyPeds = GetNearbyPeds(playerCoords, 100.0)
+--             -- Scanner les peds proches
+--             local nearbyPeds = GetNearbyPeds(playerCoords, 100.0)
             
-            for _, ped in ipairs(nearbyPeds) do
-                if DoesEntityExist(ped) and ped ~= playerPed then
-                    local pedId = PedToNet(ped)
+--             for _, ped in ipairs(nearbyPeds) do
+--                 if DoesEntityExist(ped) and ped ~= playerPed then
+--                     local pedId = PedToNet(ped)
                     
-                    -- Si le ped vient de mourir et qu'on ne l'a pas compté
-                    if IsEntityDead(ped) and not trackedEntities[pedId] then
-                        -- Vérifier si on l'a peut-être tué (à portée d'arme)
-                        local distance = #(playerCoords - GetEntityCoords(ped))
+--                     -- Si le ped vient de mourir et qu'on ne l'a pas compté
+--                     if IsEntityDead(ped) and not trackedEntities[pedId] then
+--                         -- Vérifier si on l'a peut-être tué (à portée d'arme)
+--                         local distance = #(playerCoords - GetEntityCoords(ped))
                         
-                        if distance < 50.0 then -- Portée raisonnable
-                            trackedEntities[pedId] = true
+--                         if distance < 50.0 then -- Portée raisonnable
+--                             trackedEntities[pedId] = true
                             
-                            print(string.format("^3[GunGame Backup]^7 Mort détectée à %.1fm", distance))
+--                             print(string.format("^3[GunGame Backup]^7 Mort détectée à %.1fm", distance))
                             
-                            -- Nettoyer après 5 secondes
-                            SetTimeout(5000, function()
-                                trackedEntities[pedId] = nil
-                            end)
-                        end
-                    end
-                end
-            end
-        else
-            Wait(2000)
-        end
-    end
-end)
+--                             -- Nettoyer après 5 secondes
+--                             SetTimeout(5000, function()
+--                                 trackedEntities[pedId] = nil
+--                             end)
+--                         end
+--                     end
+--                 end
+--             end
+--         else
+--             Wait(2000)
+--         end
+--     end
+-- end)
 
 -- ============================================================================
 -- RESET DU COMPTEUR LORS DU CHANGEMENT D'ARME
@@ -1140,8 +1097,6 @@ function UpdatePlayerBlips()
                     -- Mettre à jour le blip existant
                     local blip = playerBlips[i]
                     if DoesBlipExist(blip) then
-                        -- Le blip se met à jour automatiquement avec l'entité
-                        -- Mais on peut changer la couleur selon la distance, la santé, etc.
                         local playerCoords = GetEntityCoords(PlayerPedId())
                         local targetCoords = GetEntityCoords(targetPed)
                         local distance = #(playerCoords - targetCoords)
