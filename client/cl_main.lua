@@ -737,31 +737,6 @@ AddEventHandler('gungame:updateWeaponIndex', function(newIndex)
     playerData.currentWeaponIndex = newIndex
     playerData.weaponKills = 0
 end)
-
-RegisterNetEvent('gungame:syncWeaponKills')
-AddEventHandler('gungame:syncWeaponKills', function(newKillCount)
-    if not playerData.inGame then return end
-    
-    print(string.format("^2[GunGame Sync]^7 Synchronisation kills: %d -> %d", 
-        playerData.weaponKills or 0, newKillCount))
-    
-    playerData.weaponKills = newKillCount
-    
-    if Config.Debug then
-        print(string.format("^2[GunGame Sync]^7 weaponKills mis à jour: %d", playerData.weaponKills))
-    end
-end)
-
-RegisterNetEvent('gungame:syncLeaderboard')
-AddEventHandler('gungame:syncLeaderboard', function(leaderboard)
-    if not playerData.inGame then return end
-    
-    leaderboardData = leaderboard or {}
-    
-    if Config.Debug then
-        print(string.format("^2[GunGame Leaderboard]^7 Reçu: %d joueurs", #leaderboardData))
-    end
-end)
 -- ============================================================================
 -- DÉTECTION DES MORTS
 -- ============================================================================
