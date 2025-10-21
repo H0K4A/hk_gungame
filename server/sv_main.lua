@@ -231,7 +231,7 @@ AddEventHandler('gungame:joinGame', function(mapId)
 end)
 
 -- ============================================================================
--- GESTION DES KILLS
+-- GESTION DES KILLS - VERSION CORRIGÉE
 -- ============================================================================
 
 RegisterNetEvent('gungame:playerKill')
@@ -240,75 +240,67 @@ AddEventHandler('gungame:playerKill', function(targetSource)
     targetSource = tonumber(targetSource)
     
     print("^3[GunGame]^7 ========================================")
-    print(string.format("^3[GunGame]^7 playerKill appelé: source=%d, target=%d", source, tostring(targetSource or "nil")))
+    print(string.format("^3[GunGame]^7 playerKill: source=%d, target=%d", source, targetSource or "nil"))
     
-    -- Vérifications
+    -- Vérifications de base
     if not playerData[source] then
-        print("^1[GunGame]^7 ❌ ERREUR: playerData[" .. source .. "] n'existe pas")
+        print("^1[GunGame]^7 ❌ playerData[" .. source .. "] introuvable")
         print("^3[GunGame]^7 ========================================")
         return
     end
-    
-    print(string.format("^2[GunGame]^7 ✓ Source %d est en jeu", source))
     
     if not playerData[targetSource] then
-        print("^1[GunGame]^7 ❌ ERREUR: playerData[" .. tostring(targetSource) .. "] n'existe pas")
+        print("^1[GunGame]^7 ❌ playerData[" .. targetSource .. "] introuvable")
         print("^3[GunGame]^7 ========================================")
         return
     end
-    
-    print(string.format("^2[GunGame]^7 ✓ Target %d est en jeu", targetSource))
     
     local instanceId = playerData[source].instanceId
     local targetInstanceId = playerData[targetSource].instanceId
     
-    print(string.format("^3[GunGame]^7 Instances: source=%d, target=%d", instanceId, targetInstanceId))
-    
     if instanceId ~= targetInstanceId then
-        print("^1[GunGame]^7 ❌ ERREUR: Instances différentes")
+        print("^1[GunGame]^7 ❌ Instances différentes")
         print("^3[GunGame]^7 ========================================")
         return
     end
-    
-    print("^2[GunGame]^7 ✓ Même instance")
     
     local instance = InstanceManager.GetInstance(instanceId)
     
-    if not instance then
-        print("^1[GunGame]^7 ❌ ERREUR: Instance introuvable")
+    if not instance or not instance.gameActive then
+        print("^1[GunGame]^7 ❌ Instance invalide ou inactive")
         print("^3[GunGame]^7 ========================================")
         return
     end
     
-    if not instance.gameActive then
-        print("^1[GunGame]^7 ❌ ERREUR: Partie inactive")
-        print("^3[GunGame]^7 ========================================")
-        return
-    end
+    -- ========================================================================
+    -- INCRÉMENTER LE COMPTEUR SERVEUR
+    -- ========================================================================
     
-    print("^2[GunGame]^7 ✓ Instance active")
-    
-    -- AVANT l'incrémentation
     print(string.format("^3[GunGame]^7 AVANT: kills=%d, weaponKills=%d, currentWeapon=%d", 
         playerData[source].kills or 0,
         playerData[source].weaponKills or 0,
         playerData[source].currentWeapon or 0))
     
-    -- Incrémenter
+    -- Incrémenter les compteurs
     playerData[source].kills = (playerData[source].kills or 0) + 1
     playerData[source].totalKills = (playerData[source].totalKills or 0) + 1
     playerData[source].weaponKills = (playerData[source].weaponKills or 0) + 1
     
-    -- APRÈS l'incrémentation
     print(string.format("^2[GunGame]^7 APRÈS: kills=%d, weaponKills=%d, currentWeapon=%d", 
         playerData[source].kills,
         playerData[source].weaponKills,
         playerData[source].currentWeapon))
     
+    -- ========================================================================
+    -- SYNCHRONISER AVEC LE CLIENT - IMPORTANT!
+    -- ========================================================================
+    
+    TriggerClientEvent('gungame:syncWeaponKills', source, playerData[source].weaponKills)
+    
     local currentWeaponIndex = playerData[source].currentWeapon
     local weaponKills = playerData[source].weaponKills
     local weaponsCount = #Config.Weapons
-
+    
     InstanceManager.UpdateActivity(instanceId)
     
     -- Déterminer kills requis
@@ -335,7 +327,7 @@ AddEventHandler('gungame:playerKill', function(targetSource)
         duration = 3000
     })
     
-    -- Notification aux autres
+    -- Notification aux autres joueurs
     for _, playerId in ipairs(instance.players) do
         if playerId ~= source and playerId ~= targetSource then
             TriggerClientEvent('ox_lib:notify', playerId, {
@@ -347,7 +339,10 @@ AddEventHandler('gungame:playerKill', function(targetSource)
         end
     end
     
-    -- Vérifier progression
+    -- ========================================================================
+    -- VÉRIFIER LA PROGRESSION
+    -- ========================================================================
+    
     if weaponKills >= killsRequired then
         print(string.format("^2[GunGame]^7 ✅ Seuil atteint: %d/%d", weaponKills, killsRequired))
         
@@ -361,13 +356,6 @@ AddEventHandler('gungame:playerKill', function(targetSource)
     else
         local remaining = killsRequired - weaponKills
         print(string.format("^3[GunGame]^7 ⏳ Encore %d kill(s) nécessaire(s)", remaining))
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🎯 Progression',
-            description = string.format('Encore %d kill(s)', remaining),
-            type = 'inform',
-            duration = 2500
-        })
         
         if currentWeaponIndex == weaponsCount then
             TriggerClientEvent('ox_lib:notify', source, {
@@ -383,7 +371,7 @@ AddEventHandler('gungame:playerKill', function(targetSource)
 end)
 
 -- ============================================================================
--- AVANCER À L'ARME SUIVANTE
+-- AVANCER À L'ARME SUIVANTE - VERSION CORRIGÉE
 -- ============================================================================
 
 function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
@@ -397,9 +385,7 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     local nextWeapon = Config.Weapons[nextWeaponIndex]
     
     print(string.format("^2[GunGame]^7 %s passe de l'arme %d à %d (%s)", 
-        playerName, playerData[source].currentWeapon, nextWeaponIndex, nextWeapon))
-    
-    -- Réinitialiser le compteur de kills pour cette arme
+    playerName, playerData[source].currentWeapon, nextWeaponIndex, nextWeapon))
     playerData[source].weaponKills = 0
     
     -- Retirer l'ancienne arme
@@ -410,17 +396,17 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     
     Wait(500)
     
-    -- Mettre à jour l'index de l'arme
+    -- Mettre à jour l'index
     playerData[source].currentWeapon = nextWeaponIndex
     
     -- Donner la nouvelle arme
     giveWeaponToPlayer(source, nextWeapon, instanceId, false)
-    
-    -- Mettre à jour le client
+
     TriggerClientEvent('gungame:updateWeaponIndex', source, nextWeaponIndex)
     TriggerClientEvent('gungame:resetWeaponKills', source)
+    TriggerClientEvent('gungame:syncWeaponKills', source, 0) -- Reset à 0
     
-    -- Notification spéciale pour la dernière arme
+    -- Notifications
     if nextWeaponIndex == weaponsCount then
         TriggerClientEvent('ox_lib:notify', source, {
             title = '🏆 DERNIÈRE ARME !',
@@ -443,10 +429,12 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     end
     
     if Config.Debug then
-        print(string.format("^2[GunGame]^7 Progression: %s maintenant à l'arme %d/%d", 
-            playerName, nextWeaponIndex, weaponsCount))
+        print(string.format("^2[GunGame]^7 Progression: %s maintenant à l'arme %d/%d (kills: 0/%d)", 
+            playerName, nextWeaponIndex, weaponsCount, 
+            nextWeaponIndex == weaponsCount and Config.GunGame.killsForLastWeapon or Config.GunGame.killsPerWeapon))
     end
 end
+        
 
 -- ============================================================================
 -- GESTION DES MORTS

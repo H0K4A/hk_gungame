@@ -503,18 +503,17 @@ function drawGunGameHUD()
 end
 
 -- ============================================================================
--- DÉTECTION DES KILLS
+-- DÉTECTION DES KILLS - PARTIE MODIFIÉE
 -- ============================================================================
 
 AddEventHandler('gameEventTriggered', function(eventName, data)
     if not playerData.inGame then return end
     
-    -- CEventNetworkEntityDamage est déclenché quand quelqu'un prend des dégâts/meurt
     if eventName == 'CEventNetworkEntityDamage' then
-        local victim = data[1]        -- Entité victime
-        local attacker = data[2]      -- Entité attaquant
-        local isDead = data[4] == 1   -- 1 = mort, 0 = juste blessé
-        local weaponHash = data[5]    -- Hash de l'arme
+        local victim = data[1]
+        local attacker = data[2]
+        local isDead = data[4] == 1
+        local weaponHash = data[5]
         
         local playerPed = PlayerPedId()
         
@@ -526,25 +525,23 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
             if (currentTime - lastKillTime) >= killCooldown then
                 lastKillTime = currentTime
                 
-                -- Incrémenter le compteur CLIENT
-                playerData.weaponKills = (playerData.weaponKills or 0) + 1
-                
-                print(string.format("^2[GunGame Kill]^7 Kill détecté! Compteur local: %d", playerData.weaponKills))
+                -- NE PLUS INCRÉMENTER ICI - Laisser le serveur gérer
+                print("^2[GunGame Kill]^7 Kill détecté! Envoi au serveur...")
                 
                 -- Envoyer au serveur
                 if IsPedAPlayer(victim) then
                     local targetPlayerId = NetworkGetPlayerIndexFromPed(victim)
                     if targetPlayerId ~= -1 then
                         local targetServerId = GetPlayerServerId(targetPlayerId)
-                        print(string.format("^2[GunGame Kill]^7 Envoi au serveur - Kill joueur: %d", targetServerId))
+                        print(string.format("^2[GunGame Kill]^7 Kill joueur: %d", targetServerId))
                         TriggerServerEvent('gungame:playerKill', targetServerId)
                     end
                 else
-                    print("^2[GunGame Kill]^7 Envoi au serveur - Kill NPC/Bot")
+                    print("^2[GunGame Kill]^7 Kill NPC/Bot")
                     TriggerServerEvent('gungame:botKill')
                 end
                 
-                -- Notification visuelle locale
+                -- Notification visuelle locale (optionnelle)
                 lib.notify({
                     title = '💀 KILL',
                     description = 'Élimination confirmée!',
@@ -560,44 +557,32 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
     end
 end)
 
--- Citizen.CreateThread(function()
---     while true do
---         Wait(500)
-        
---         if playerData.inGame then
---             local playerPed = PlayerPedId()
---             local playerCoords = GetEntityCoords(playerPed)
-            
---             -- Scanner les peds proches
---             local nearbyPeds = GetNearbyPeds(playerCoords, 100.0)
-            
---             for _, ped in ipairs(nearbyPeds) do
---                 if DoesEntityExist(ped) and ped ~= playerPed then
---                     local pedId = PedToNet(ped)
-                    
---                     -- Si le ped vient de mourir et qu'on ne l'a pas compté
---                     if IsEntityDead(ped) and not trackedEntities[pedId] then
---                         -- Vérifier si on l'a peut-être tué (à portée d'arme)
---                         local distance = #(playerCoords - GetEntityCoords(ped))
-                        
---                         if distance < 50.0 then -- Portée raisonnable
---                             trackedEntities[pedId] = true
-                            
---                             print(string.format("^3[GunGame Backup]^7 Mort détectée à %.1fm", distance))
-                            
---                             -- Nettoyer après 5 secondes
---                             SetTimeout(5000, function()
---                                 trackedEntities[pedId] = nil
---                             end)
---                         end
---                     end
---                 end
---             end
---         else
---             Wait(2000)
---         end
---     end
--- end)
+-- ============================================================================
+-- SYNCHRONISATION DU COMPTEUR DEPUIS LE SERVEUR - NOUVEAU
+-- ============================================================================
+
+RegisterNetEvent('gungame:syncWeaponKills')
+AddEventHandler('gungame:syncWeaponKills', function(newKillCount)
+    print(string.format("^2[GunGame Sync]^7 Réception weaponKills: %d -> %d", 
+        playerData.weaponKills or 0, newKillCount))
+    
+    playerData.weaponKills = newKillCount
+    
+    -- Notification visuelle de progression
+    local currentWeaponIndex = playerData.currentWeaponIndex or 1
+    local maxWeapons = #Config.Weapons
+    local killsRequired = currentWeaponIndex == maxWeapons and Config.GunGame.killsForLastWeapon or Config.GunGame.killsPerWeapon
+    
+    if newKillCount < killsRequired then
+        local remaining = killsRequired - newKillCount
+        lib.notify({
+            title = '🎯 Progression',
+            description = string.format('Encore %d kill(s) pour la prochaine arme', remaining),
+            type = 'inform',
+            duration = 2500
+        })
+    end
+end)
 
 -- ============================================================================
 -- RESET DU COMPTEUR LORS DU CHANGEMENT D'ARME
@@ -615,7 +600,6 @@ AddEventHandler('gungame:updateWeaponIndex', function(newIndex)
     playerData.currentWeaponIndex = newIndex
     playerData.weaponKills = 0
 end)
-
 -- ============================================================================
 -- DÉTECTION DES MORTS
 -- ============================================================================
