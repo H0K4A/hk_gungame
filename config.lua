@@ -9,7 +9,7 @@ Config.Debug = true -- Activé pour voir les logs de kills
 Config.MapRotation = {
     enabled = true,
     -- Les 2 maps actuelles en rotation
-    activeMaps = {"ballas", "fourriere", "cayoperico", "fuenteblanca", "chantier", "universite", "pecheur", "motelskatepark", "grapeseed"},
+    activeMaps = {"ballas", "fourriere", "cayoperico", "fuenteblanca", "chantier", "universite", "pecheur", "motelskatepark", "grapeseed", "casseavion"},
     -- Rotation automatique toutes les X millisecondes (3600000 = 1 heure)
     rotationInterval = 3600000,
     -- Rotation après une victoire (changement immédiat)
