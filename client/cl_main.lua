@@ -1,9 +1,3 @@
--- ============================================================================
--- GUNGAME v2.0.0 - client/cl_main.lua (PARTIE 1/3)
--- Remplacer votre cl_main.lua actuel
--- SUPPRESSIONS: playerBlips, playerEntities, createPlayerBlip, etc.
--- ============================================================================
-
 local playerData = {
     inGame = false,
     instanceId = nil,
@@ -29,23 +23,6 @@ local killCooldown = 1000 -- 1 seconde entre chaque kill
 local trackedEntities = {}
 
 -- ============================================================================
--- INITIALISATION
--- ============================================================================
-
-AddEventHandler('onClientResourceStart', function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then return end
-    
-    print("^2[GunGame Client]^7 Script démarré")
-    
-    if not lib then
-        print("^1[GunGame Client]^7 ERREUR: ox_lib n'est pas chargé!")
-        return
-    end
-    
-    print("^2[GunGame Client]^7 ox_lib détecté")
-end)
-
--- ============================================================================
 -- COMMANDES
 -- ============================================================================
 
@@ -57,7 +34,6 @@ end, false)
 -- NETTOYAGE À LA SORTIE DU JEU
 -- ============================================================================
 
--- Modifier l'événement leavegame existant pour ajouter:
 RegisterCommand('leavegame', function()
     if playerData.inGame then
         local ped = PlayerPedId()
@@ -73,7 +49,7 @@ RegisterCommand('leavegame', function()
         RemoveAllPedWeapons(ped, true)
         lib.hideTextUI()
         removeGunGameZoneBlip()
-        RemoveAllPlayerBlips() -- AJOUTER CETTE LIGNE
+        RemoveAllPlayerBlips()
         
         if lastSpawn then
             SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, false)
@@ -124,7 +100,6 @@ end)
 
 RegisterNetEvent('gungame:openMenu')
 AddEventHandler('gungame:openMenu', function()
-    print("^2[GunGame Client]^7 Ouverture du menu...") -- DEBUG
     
     if not lib then
         print("^1[GunGame Client]^7 ERREUR: ox_lib n'est pas chargé!")
@@ -146,8 +121,6 @@ AddEventHandler('gungame:openMenu', function()
         return
     end
     
-    print("^2[GunGame Client]^7 Récupération des parties disponibles...") -- DEBUG
-    
     -- Récupérer les parties disponibles
     lib.callback('gungame:getAvailableGames', false, function(games)
         if not games then
@@ -159,8 +132,6 @@ AddEventHandler('gungame:openMenu', function()
             })
             return
         end
-        
-        print("^2[GunGame Client]^7 " .. #games .. " partie(s) trouvée(s)") -- DEBUG
         
         local options = {}
         
@@ -180,7 +151,6 @@ AddEventHandler('gungame:openMenu', function()
                 icon = icon,
                 disabled = isFull,
                 onSelect = function()
-                    print("^2[GunGame Client]^7 Tentative de rejoindre: " .. game.mapId) -- DEBUG
                     TriggerServerEvent('gungame:joinGame', game.mapId)
                 end
             })
@@ -198,12 +168,7 @@ AddEventHandler('gungame:openMenu', function()
         table.insert(options, {
             title = 'Fermer le menu',
             icon = 'fa-solid fa-xmark',
-            onSelect = function()
-                print("^2[GunGame Client]^7 Menu fermé")
-            end
         })
-        
-        print("^2[GunGame Client]^7 Enregistrement du contexte...") -- DEBUG
         
         -- Enregistrer et afficher le menu
         lib.registerContext({
@@ -212,9 +177,7 @@ AddEventHandler('gungame:openMenu', function()
             options = options
         })
         
-        print("^2[GunGame Client]^7 Affichage du contexte...") -- DEBUG
         lib.showContext('gungame_main_menu')
-        print("^2[GunGame Client]^7 Menu affiché!") -- DEBUG
     end)
 end)
 
@@ -226,10 +189,6 @@ RegisterNetEvent('gungame:equipWeapon')
 AddEventHandler('gungame:equipWeapon', function(weapon)
     local ped = PlayerPedId()
     local weaponHash = GetHashKey(weapon)
-    
-    if Config.Debug then
-        print(string.format("^2[GunGame Client]^7 Équipement: %s", weapon))
-    end
     
     Wait(500)
     TriggerServerEvent('ox_inventory:useItem', weapon:lower(), nil)
@@ -277,10 +236,8 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     playerData.instanceId = instanceId
     playerData.mapId = mapId
     playerData.kills = 0
-    playerData.weaponKills = 0  -- IMPORTANT: Initialiser à 0
+    playerData.weaponKills = 0
     playerData.currentWeaponIndex = 1
-    
-    print("^2[GunGame]^7 Initialisation: weaponKills = 0")
     
     local spawnPoint = spawn or Config.Maps[mapId].spawnPoints[1]
     
@@ -313,8 +270,16 @@ end)
 RegisterNetEvent('gungame:teleportBeforeRevive')
 AddEventHandler('gungame:teleportBeforeRevive', function(spawn)
     local ped = PlayerPedId()
+    
+    -- Option A : Téléportation brutale sans écran noir
+    -- Désactiver temporairement le rendu pour éviter les glitches visuels
+    DoScreenFadeOut(0) -- Fade out instantané (0ms)
+    
     SetEntityCoords(ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
     SetEntityHeading(ped, spawn.heading)
+    
+    -- Attendre 100ms que la position soit bien définie
+    Wait(100)
 end)
 
 RegisterNetEvent('gungame:activateGodMode')
@@ -361,7 +326,6 @@ function drawGunGameHUD()
     local maxWeapons = #Config.Weapons
     local godMode = playerData.godMode
 
-    -- UTILISER weaponKills (pas kills)
     local weaponKills = playerData.weaponKills or 0
     local killsRequired = currentWeapon == maxWeapons and Config.GunGame.killsForLastWeapon or Config.GunGame.killsPerWeapon
 
@@ -372,7 +336,7 @@ function drawGunGameHUD()
     local startY = 0.015
     local lineHeight = 0.027
     local boxWidth = 0.22
-    local boxHeight = 0.28
+    local boxHeight = 0.32 -- Augmenté pour le leaderboard
 
     -- Background
     DrawRect(startX + boxWidth/2, startY + boxHeight/2, boxWidth, boxHeight, 0, 0, 0, 215)
@@ -457,7 +421,7 @@ function drawGunGameHUD()
     DrawText(startX + 0.028, currentY + 0.005)
     currentY = currentY + lineHeight + 0.005
 
-    -- KILLS (LA PARTIE IMPORTANTE)
+    -- KILLS
     SetTextFont(0)
     SetTextScale(0.0, 0.28)
     SetTextColour(255, 255, 255, 255)
@@ -472,14 +436,7 @@ function drawGunGameHUD()
     local killBarWidth = boxWidth - 0.065
     local killBarHeight = 0.014
     
-    -- CALCUL DE LA PROGRESSION
     local killProgress = math.min(weaponKills / killsRequired, 1.0)
-    
-    -- DEBUG: Afficher dans la console F8
-    if Config.Debug then
-        print(string.format("HUD: weaponKills=%d, killsRequired=%d, progress=%.2f", 
-            weaponKills, killsRequired, killProgress))
-    end
     
     DrawRect(killBarX + killBarWidth/2, killBarY, killBarWidth, killBarHeight, 40, 40, 40, 220)
     
@@ -488,7 +445,6 @@ function drawGunGameHUD()
         DrawRect(killBarX + (killBarWidth * killProgress)/2, killBarY, killBarWidth * killProgress, killBarHeight, r, g, b, 255)
     end
     
-    -- AFFICHER LE COMPTEUR
     SetTextFont(4)
     SetTextScale(0.0, 0.28)
     SetTextCentre(true)
@@ -529,10 +485,148 @@ function drawGunGameHUD()
         currentY = currentY + lineHeight + 0.004
     end
     
-    -- GodMode
+    -- ========================================================================
+    -- 🏆 LEADERBOARD (NOUVEAU)
+    -- ========================================================================
+    
+    if leaderboardData and #leaderboardData > 0 then
+        -- Séparateur
+        --DrawRect(startX + boxWidth/2, currentY, boxWidth - 0.02, 0.001, 0, 255, 136, 200)
+        --currentY = currentY + 0.050
+        
+        -- Titre LEADERBOARD
+        SetTextFont(4)
+        SetTextScale(0.0, 0.32)
+        SetTextCentre(true)
+        SetTextColour(255, 215, 0, 255)
+        SetTextEntry("STRING")
+        AddTextComponentString("🏆 CLASSEMENT")
+        DrawText(startX + boxWidth/2, currentY + 0.06)
+        currentY = currentY + lineHeight + 0.06
+        
+        -- Afficher le TOP 3
+        local maxDisplay = math.min(3, #leaderboardData)
+        
+        for i = 1, maxDisplay do
+            local player = leaderboardData[i]
+            local isMe = player.source == GetPlayerServerId(PlayerId())
+            
+            -- Icône de position
+            local positionIcon = ""
+            local iconColor = {255, 255, 255}
+            
+            if i == 1 then
+                positionIcon = "🥇"
+                iconColor = {255, 215, 0} -- Or
+            elseif i == 2 then
+                positionIcon = "🥈"
+                iconColor = {192, 192, 192} -- Argent
+            elseif i == 3 then
+                positionIcon = "🥉"
+                iconColor = {205, 127, 50} -- Bronze
+            else
+                positionIcon = tostring(i) .. "."
+                iconColor = {255, 255, 255}
+            end
+            
+            -- Background si c'est nous
+            if isMe then
+                DrawRect(startX + boxWidth/2, currentY + 0.010, boxWidth - 0.03, 0.022, 0, 255, 136, 100)
+            end
+            
+            -- Position + Nom
+            SetTextFont(0)
+            SetTextScale(0.0, 0.26)
+            SetTextColour(iconColor[1], iconColor[2], iconColor[3], 255)
+            SetTextEntry("STRING")
+            AddTextComponentString(positionIcon)
+            DrawText(startX + 0.018, currentY)
+            
+            -- Nom du joueur (tronqué si trop long)
+            local displayName = player.name
+            if string.len(displayName) > 12 then
+                displayName = string.sub(displayName, 1, 12) .. "..."
+            end
+            
+            SetTextFont(0)
+            SetTextScale(0.0, 0.26)
+            SetTextColour(isMe and 0 or 255, isMe and 255 or 255, isMe and 136 or 255, 255)
+            SetTextEntry("STRING")
+            AddTextComponentString(displayName)
+            DrawText(startX + 0.045, currentY)
+            
+            -- Arme actuelle
+            SetTextFont(4)
+            SetTextScale(0.0, 0.26)
+            SetTextRightJustify(true)
+            SetTextWrap(0.0, startX + boxWidth - 0.018)
+            SetTextColour(255, 0, 0, 255)
+            SetTextEntry("STRING")
+            AddTextComponentString(player.weaponIndex .. "/" .. maxWeapons)
+            DrawText(0, currentY)
+            
+            currentY = currentY + lineHeight - 0.003
+        end
+        
+        -- Afficher notre position si on n'est pas dans le top 3
+        local myPosition = nil
+        local myData = nil
+        
+        for i, player in ipairs(leaderboardData) do
+            if player.source == GetPlayerServerId(PlayerId()) then
+                myPosition = i
+                myData = player
+                break
+            end
+        end
+        
+        if myPosition and myPosition > 3 then
+            currentY = currentY + 0.005
+            
+            -- Séparateur
+            DrawRect(startX + boxWidth/2, currentY, boxWidth - 0.04, 0.001, 100, 100, 100, 150)
+            currentY = currentY + 0.008
+            
+            -- Background
+            DrawRect(startX + boxWidth/2, currentY + 0.010, boxWidth - 0.03, 0.022, 0, 255, 136, 100)
+            
+            -- Position
+            SetTextFont(0)
+            SetTextScale(0.0, 0.26)
+            SetTextColour(255, 255, 255, 255)
+            SetTextEntry("STRING")
+            AddTextComponentString(myPosition .. ".")
+            DrawText(startX + 0.018, currentY)
+            
+            -- Nom (Vous)
+            SetTextFont(0)
+            SetTextScale(0.0, 0.26)
+            SetTextColour(0, 255, 136, 255)
+            SetTextEntry("STRING")
+            AddTextComponentString("Vous")
+            DrawText(startX + 0.045, currentY)
+            
+            -- Arme
+            SetTextFont(4)
+            SetTextScale(0.0, 0.26)
+            SetTextRightJustify(true)
+            SetTextWrap(0.0, startX + boxWidth - 0.018)
+            SetTextColour(255, 0, 0, 255)
+            SetTextEntry("STRING")
+            AddTextComponentString(myData.weaponIndex .. "/" .. maxWeapons)
+            DrawText(0, currentY)
+        end
+    end
+    
+    -- ========================================================================
+    -- GODMODE (à la fin)
+    -- ========================================================================
+    
     if godMode then
+        currentY = startY + boxHeight - 0.045
+        
         local alpha = math.floor(200 + 55 * math.sin(GetGameTimer() / 300))
-        DrawRect(startX + boxWidth/2, currentY + 0.055, boxWidth - 0.02, 0.028, 255, 215, 0, alpha)
+        DrawRect(startX + boxWidth/2, currentY + 0.014, boxWidth - 0.02, 0.028, 255, 215, 0, alpha)
         
         SetTextFont(4)
         SetTextProportional(1)
@@ -541,23 +635,22 @@ function drawGunGameHUD()
         SetTextEntry("STRING")
         SetTextCentre(true)
         AddTextComponentString("INVINCIBLE")
-        DrawText(startX + boxWidth/2, currentY + 0.04)
+        DrawText(startX + boxWidth/2, currentY)
     end
 end
 
 -- ============================================================================
--- DÉTECTION DES KILLS
+-- DÉTECTION DES KILLS - PARTIE MODIFIÉE
 -- ============================================================================
 
 AddEventHandler('gameEventTriggered', function(eventName, data)
     if not playerData.inGame then return end
     
-    -- CEventNetworkEntityDamage est déclenché quand quelqu'un prend des dégâts/meurt
     if eventName == 'CEventNetworkEntityDamage' then
-        local victim = data[1]        -- Entité victime
-        local attacker = data[2]      -- Entité attaquant
-        local isDead = data[4] == 1   -- 1 = mort, 0 = juste blessé
-        local weaponHash = data[5]    -- Hash de l'arme
+        local victim = data[1]
+        local attacker = data[2]
+        local isDead = data[4] == 1
+        local weaponHash = data[5]
         
         local playerPed = PlayerPedId()
         
@@ -569,25 +662,23 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
             if (currentTime - lastKillTime) >= killCooldown then
                 lastKillTime = currentTime
                 
-                -- Incrémenter le compteur CLIENT
-                playerData.weaponKills = (playerData.weaponKills or 0) + 1
-                
-                print(string.format("^2[GunGame Kill]^7 Kill détecté! Compteur local: %d", playerData.weaponKills))
+                -- NE PLUS INCRÉMENTER ICI - Laisser le serveur gérer
+                print("^2[GunGame Kill]^7 Kill détecté! Envoi au serveur...")
                 
                 -- Envoyer au serveur
                 if IsPedAPlayer(victim) then
                     local targetPlayerId = NetworkGetPlayerIndexFromPed(victim)
                     if targetPlayerId ~= -1 then
                         local targetServerId = GetPlayerServerId(targetPlayerId)
-                        print(string.format("^2[GunGame Kill]^7 Envoi au serveur - Kill joueur: %d", targetServerId))
+                        print(string.format("^2[GunGame Kill]^7 Kill joueur: %d", targetServerId))
                         TriggerServerEvent('gungame:playerKill', targetServerId)
                     end
                 else
-                    print("^2[GunGame Kill]^7 Envoi au serveur - Kill NPC/Bot")
+                    print("^2[GunGame Kill]^7 Kill NPC/Bot")
                     TriggerServerEvent('gungame:botKill')
                 end
                 
-                -- Notification visuelle locale
+                -- Notification visuelle locale (optionnelle)
                 lib.notify({
                     title = '💀 KILL',
                     description = 'Élimination confirmée!',
@@ -603,42 +694,30 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
     end
 end)
 
-Citizen.CreateThread(function()
-    while true do
-        Wait(500) -- Vérifier toutes les 500ms
-        
-        if playerData.inGame then
-            local playerPed = PlayerPedId()
-            local playerCoords = GetEntityCoords(playerPed)
-            
-            -- Scanner les peds proches
-            local nearbyPeds = GetNearbyPeds(playerCoords, 100.0)
-            
-            for _, ped in ipairs(nearbyPeds) do
-                if DoesEntityExist(ped) and ped ~= playerPed then
-                    local pedId = PedToNet(ped)
-                    
-                    -- Si le ped vient de mourir et qu'on ne l'a pas compté
-                    if IsEntityDead(ped) and not trackedEntities[pedId] then
-                        -- Vérifier si on l'a peut-être tué (à portée d'arme)
-                        local distance = #(playerCoords - GetEntityCoords(ped))
-                        
-                        if distance < 50.0 then -- Portée raisonnable
-                            trackedEntities[pedId] = true
-                            
-                            print(string.format("^3[GunGame Backup]^7 Mort détectée à %.1fm", distance))
-                            
-                            -- Nettoyer après 5 secondes
-                            SetTimeout(5000, function()
-                                trackedEntities[pedId] = nil
-                            end)
-                        end
-                    end
-                end
-            end
-        else
-            Wait(2000)
-        end
+-- ============================================================================
+-- SYNCHRONISATION DU COMPTEUR DEPUIS LE SERVEUR - NOUVEAU
+-- ============================================================================
+
+RegisterNetEvent('gungame:syncWeaponKills')
+AddEventHandler('gungame:syncWeaponKills', function(newKillCount)
+    print(string.format("^2[GunGame Sync]^7 Réception weaponKills: %d -> %d", 
+        playerData.weaponKills or 0, newKillCount))
+    
+    playerData.weaponKills = newKillCount
+    
+    -- Notification visuelle de progression
+    local currentWeaponIndex = playerData.currentWeaponIndex or 1
+    local maxWeapons = #Config.Weapons
+    local killsRequired = currentWeaponIndex == maxWeapons and Config.GunGame.killsForLastWeapon or Config.GunGame.killsPerWeapon
+    
+    if newKillCount < killsRequired then
+        local remaining = killsRequired - newKillCount
+        lib.notify({
+            title = '🎯 Progression',
+            description = string.format('Encore %d kill(s) pour la prochaine arme', remaining),
+            type = 'inform',
+            duration = 2500
+        })
     end
 end)
 
@@ -659,6 +738,30 @@ AddEventHandler('gungame:updateWeaponIndex', function(newIndex)
     playerData.weaponKills = 0
 end)
 
+RegisterNetEvent('gungame:syncWeaponKills')
+AddEventHandler('gungame:syncWeaponKills', function(newKillCount)
+    if not playerData.inGame then return end
+    
+    print(string.format("^2[GunGame Sync]^7 Synchronisation kills: %d -> %d", 
+        playerData.weaponKills or 0, newKillCount))
+    
+    playerData.weaponKills = newKillCount
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame Sync]^7 weaponKills mis à jour: %d", playerData.weaponKills))
+    end
+end)
+
+RegisterNetEvent('gungame:syncLeaderboard')
+AddEventHandler('gungame:syncLeaderboard', function(leaderboard)
+    if not playerData.inGame then return end
+    
+    leaderboardData = leaderboard or {}
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame Leaderboard]^7 Reçu: %d joueurs", #leaderboardData))
+    end
+end)
 -- ============================================================================
 -- DÉTECTION DES MORTS
 -- ============================================================================
@@ -1140,8 +1243,6 @@ function UpdatePlayerBlips()
                     -- Mettre à jour le blip existant
                     local blip = playerBlips[i]
                     if DoesBlipExist(blip) then
-                        -- Le blip se met à jour automatiquement avec l'entité
-                        -- Mais on peut changer la couleur selon la distance, la santé, etc.
                         local playerCoords = GetEntityCoords(PlayerPedId())
                         local targetCoords = GetEntityCoords(targetPed)
                         local distance = #(playerCoords - targetCoords)
