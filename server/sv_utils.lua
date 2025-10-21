@@ -1,5 +1,5 @@
 -- ============================================================================
--- GUNGAME v2.0.0 - server/sv_utils.lua - VERSION CORRIGÉE
+-- GUNGAME v2.0.0 - server/sv_utils.lua - ROTATION 2 MAPS
 -- ============================================================================
 
 -- ============================================================================
@@ -20,7 +20,6 @@ function SpawnSystem.GetSpawnForPlayer(instanceId, mapId, playerId)
     
     local spawnPoints = mapData.spawnPoints
     
-    -- Initialiser les structures si nécessaire
     if not instanceSpawnIndexes[instanceId] then
         instanceSpawnIndexes[instanceId] = 0
     end
@@ -186,7 +185,8 @@ function InstanceManager.FindOrCreateInstance(mapId)
             gameActive = false,
             currentPlayers = 0,
             playersData = {},
-            maxPlayers = Config.InstanceSystem.maxPlayersPerInstance or 20
+            maxPlayers = Config.InstanceSystem.maxPlayersPerInstance or 20,
+            lastActivity = os.time() -- Timestamp de dernière activité
         }
         
         instances[instanceId] = newInstance
@@ -235,6 +235,12 @@ function InstanceManager.RemoveInstance(instanceId)
     return true
 end
 
+function InstanceManager.UpdateActivity(instanceId)
+    if instances[instanceId] then
+        instances[instanceId].lastActivity = os.time()
+    end
+end
+
 -- Thread de nettoyage automatique des instances vides
 Citizen.CreateThread(function()
     while true do
@@ -255,12 +261,13 @@ Citizen.CreateThread(function()
 end)
 
 -- ============================================================================
--- MAP ROTATION - Gestion de la rotation des maps
+-- MAP ROTATION - NOUVEAU SYSTÈME 2 MAPS
 -- ============================================================================
 
 MapRotation = {}
-local rotationTimer = nil
-local currentRotationIndex = 1
+local activeMaps = {} -- Les 2 maps actuellement actives
+local usedMapIndexes = {} -- Historique des maps utilisées
+local mapIdleTimers = {} -- Timers d'inactivité pour chaque map
 
 function MapRotation.Initialize()
     if not Config.MapRotation or not Config.MapRotation.enabled then
@@ -268,32 +275,83 @@ function MapRotation.Initialize()
         return
     end
     
-    if not Config.MapRotation.activeMaps or #Config.MapRotation.activeMaps < 1 then
-        print("^1[MapRotation]^7 ERREUR: Au moins 1 map requise")
+    if not Config.MapRotation.allMaps or #Config.MapRotation.allMaps < 2 then
+        print("^1[MapRotation]^7 ERREUR: Au moins 2 maps requises dans allMaps")
         return
     end
     
-    print("^2[MapRotation]^7 Système activé avec " .. #Config.MapRotation.activeMaps .. " maps")
-    MapRotation.StartAutoRotation()
+    -- Sélectionner 2 maps aléatoires au démarrage
+    activeMaps = MapRotation.SelectRandomMaps(Config.MapRotation.simultaneousMaps or 2)
+    
+    print("^2[MapRotation]^7 ==========================================")
+    print("^2[MapRotation]^7 Système de rotation 2 maps activé")
+    print("^2[MapRotation]^7 Maps actives:")
+    for _, mapId in ipairs(activeMaps) do
+        local mapData = Config.Maps[mapId]
+        print(string.format("^3[MapRotation]^7   - %s (%s)", mapId, mapData and mapData.label or "Inconnu"))
+    end
+    print("^2[MapRotation]^7 ==========================================")
+    
+    -- Démarrer la surveillance d'inactivité
+    MapRotation.StartIdleMonitoring()
 end
 
-function MapRotation.GetCurrentMap()
-    if not Config.MapRotation or not Config.MapRotation.activeMaps then
-        return nil
+function MapRotation.SelectRandomMaps(count)
+    local allMaps = Config.MapRotation.allMaps
+    local selected = {}
+    local available = {}
+    
+    -- Créer une liste des maps disponibles
+    for _, mapId in ipairs(allMaps) do
+        table.insert(available, mapId)
     end
-    return Config.MapRotation.activeMaps[currentRotationIndex]
+    
+    -- Sélectionner 'count' maps aléatoires
+    for i = 1, math.min(count, #available) do
+        local randomIndex = math.random(1, #available)
+        table.insert(selected, available[randomIndex])
+        table.remove(available, randomIndex)
+    end
+    
+    return selected
+end
+
+function MapRotation.GetActiveMaps()
+    -- S'assurer qu'on retourne toujours une table valide
+    if not activeMaps then
+        activeMaps = {}
+    end
+    return activeMaps
+end
+
+function MapRotation.IsMapActive(mapId)
+    for _, activeMapId in ipairs(activeMaps) do
+        if activeMapId == mapId then
+            return true
+        end
+    end
+    return false
 end
 
 function MapRotation.GetAvailableGames()
     local games = {}
     
-    if not Config.MapRotation or not Config.MapRotation.activeMaps then
-        print("^1[MapRotation]^7 Config.MapRotation non défini")
-        return games
+    -- Vérifier que activeMaps est initialisé
+    if not activeMaps or #activeMaps == 0 then
+        print("^1[MapRotation]^7 ERREUR: activeMaps non initialisé ou vide")
+        
+        -- Fallback: initialiser avec 2 maps aléatoires
+        if Config.MapRotation and Config.MapRotation.allMaps and #Config.MapRotation.allMaps >= 2 then
+            activeMaps = MapRotation.SelectRandomMaps(Config.MapRotation.simultaneousMaps or 2)
+            print("^3[MapRotation]^7 Fallback: activation de 2 maps aléatoires")
+        else
+            return games
+        end
     end
     
-    for _, mapId in ipairs(Config.MapRotation.activeMaps) do
+    for _, mapId in ipairs(activeMaps) do
         local mapData = Config.Maps[mapId]
+        
         if mapData then
             local instance = InstanceManager.FindOrCreateInstance(mapId)
             
@@ -314,72 +372,163 @@ function MapRotation.GetAvailableGames()
     return games
 end
 
-function MapRotation.GetRotationInfo()
-    if not Config.MapRotation or not Config.MapRotation.activeMaps then
-        return nil
+function MapRotation.ReplaceMap(oldMapId, reason)
+    reason = reason or "Rotation automatique"
+    
+    local allMaps = Config.MapRotation.allMaps
+    local available = {}
+    
+    -- Trouver les maps non utilisées
+    for _, mapId in ipairs(allMaps) do
+        local isActive = false
+        for _, activeMapId in ipairs(activeMaps) do
+            if activeMapId == mapId then
+                isActive = true
+                break
+            end
+        end
+        
+        if not isActive then
+            table.insert(available, mapId)
+        end
     end
     
-    local nextIndex = (currentRotationIndex % #Config.MapRotation.activeMaps) + 1
-    local nextMap = Config.MapRotation.activeMaps[nextIndex]
-    local nextMapData = Config.Maps[nextMap]
-    
-    if nextMapData then
-        return {
-            nextMapLabel = nextMapData.label or nextMapData.name or nextMap,
-            minutesUntil = 60,
-            secondsUntil = 0
-        }
+    if #available == 0 then
+        print("^3[MapRotation]^7 Aucune map disponible pour remplacer " .. oldMapId)
+        return false
     end
     
-    return nil
-end
-
-function MapRotation.StartAutoRotation()
-    if rotationTimer then
-        ClearTimeout(rotationTimer)
-    end
-    
-    if not Config.MapRotation or not Config.MapRotation.rotationInterval then
-        print("^1[MapRotation]^7 ERREUR: rotationInterval non défini")
-        return
-    end
-    
-    rotationTimer = SetTimeout(Config.MapRotation.rotationInterval, function()
-        MapRotation.RotateToNext()
-        MapRotation.StartAutoRotation()
-    end)
-    
-    local minutes = Config.MapRotation.rotationInterval / 60000
-    if Config.Debug then
-        print(string.format("^2[MapRotation]^7 Prochain changement dans %.0f minutes", minutes))
-    end
-end
-
-function MapRotation.RotateToNext()
-    if not Config.MapRotation or not Config.MapRotation.activeMaps then
-        print("^1[MapRotation]^7 ERREUR: Impossible de faire la rotation")
-        return
-    end
-    
-    local previousIndex = currentRotationIndex
-    local previousMapId = Config.MapRotation.activeMaps[previousIndex]
-    
-    currentRotationIndex = (currentRotationIndex % #Config.MapRotation.activeMaps) + 1
-    local newMapId = Config.MapRotation.activeMaps[currentRotationIndex]
+    -- Sélectionner une map aléatoire
+    local newMapId = available[math.random(1, #available)]
+    local oldMapData = Config.Maps[oldMapId]
     local newMapData = Config.Maps[newMapId]
     
-    if not newMapData then
-        print("^1[MapRotation]^7 ERREUR: Nouvelle map introuvable")
+    -- Remplacer dans la liste active
+    for i, mapId in ipairs(activeMaps) do
+        if mapId == oldMapId then
+            activeMaps[i] = newMapId
+            break
+        end
+    end
+    
+    print(string.format("^2[MapRotation]^7 Rotation (%s): %s -> %s", 
+        reason,
+        oldMapData and oldMapData.label or oldMapId, 
+        newMapData and newMapData.label or newMapId))
+    
+    -- Notifier tous les joueurs
+    TriggerClientEvent('gungame:notifyMapRotation', -1, {
+        previousMap = oldMapData and oldMapData.label or oldMapId,
+        newMap = newMapData and newMapData.label or newMapId,
+        reason = reason
+    })
+    
+    -- Forcer les joueurs de cette map à quitter
+    MapRotation.KickPlayersFromMap(oldMapId)
+    
+    -- Réinitialiser le timer d'inactivité
+    mapIdleTimers[newMapId] = os.time()
+    mapIdleTimers[oldMapId] = nil
+    
+    return true
+end
+
+function MapRotation.KickPlayersFromMap(mapId)
+    local affectedPlayers = {}
+    
+    -- Trouver toutes les instances de cette map
+    for instanceId, instance in pairs(InstanceManager.GetAllInstances()) do
+        if instance.map == mapId and instance.players then
+            for _, playerId in ipairs(instance.players) do
+                table.insert(affectedPlayers, {
+                    source = playerId,
+                    instanceId = instanceId
+                })
+            end
+        end
+    end
+    
+    if #affectedPlayers > 0 then
+        print(string.format("^3[MapRotation]^7 Expulsion de %d joueur(s) de la map %s", 
+            #affectedPlayers, mapId))
+        
+        for _, playerInfo in ipairs(affectedPlayers) do
+            TriggerEvent('gungame:rotationForcedQuit', playerInfo.source)
+        end
+    end
+end
+
+function MapRotation.OnVictory(mapId)
+    if not Config.MapRotation.rotateOnVictory then
         return
     end
     
-    print("^2[MapRotation]^7 Rotation: " .. previousMapId .. " -> " .. newMapId)
+    print(string.format("^2[MapRotation]^7 Victoire détectée sur %s, rotation programmée", mapId))
     
-    TriggerClientEvent('gungame:notifyMapRotation', -1, {
-        previousMap = Config.Maps[previousMapId].label or previousMapId,
-        newMap = newMapData.label or newMapId
-    })
+    SetTimeout(Config.MapRotation.victoryRotationDelay or 5000, function()
+        MapRotation.ReplaceMap(mapId, "Victoire")
+    end)
+end
+
+function MapRotation.CheckIdleMaps()
+    local currentTime = os.time()
+    local idleThreshold = (Config.MapRotation.idleRotationInterval or 3600000) / 1000 -- Convertir en secondes
     
-    -- Forcer tous les joueurs à quitter
-    TriggerEvent('gungame:rotationForcedQuit')
+    for _, mapId in ipairs(activeMaps) do
+        -- Vérifier si la map a des joueurs
+        local hasPlayers = false
+        
+        for instanceId, instance in pairs(InstanceManager.GetAllInstances()) do
+            if instance.map == mapId and instance.currentPlayers and instance.currentPlayers > 0 then
+                hasPlayers = true
+                mapIdleTimers[mapId] = currentTime -- Reset timer
+                break
+            end
+        end
+        
+        if not hasPlayers then
+            -- Initialiser le timer si nécessaire
+            if not mapIdleTimers[mapId] then
+                mapIdleTimers[mapId] = currentTime
+            end
+            
+            -- Vérifier si le délai d'inactivité est dépassé
+            local idleTime = currentTime - mapIdleTimers[mapId]
+            
+            if idleTime >= idleThreshold then
+                print(string.format("^3[MapRotation]^7 Map %s inactive depuis %d secondes", 
+                    mapId, idleTime))
+                MapRotation.ReplaceMap(mapId, "Inactivité")
+            end
+        end
+    end
+end
+
+function MapRotation.StartIdleMonitoring()
+    -- Initialiser les timers
+    for _, mapId in ipairs(activeMaps) do
+        mapIdleTimers[mapId] = os.time()
+    end
+    
+    -- Thread de surveillance
+    Citizen.CreateThread(function()
+        while Config.MapRotation.enabled do
+            Wait(60000) -- Vérifier toutes les minutes
+            
+            if Config.MapRotation.rotateEmptyMaps then
+                MapRotation.CheckIdleMaps()
+            end
+        end
+    end)
+    
+    print("^2[MapRotation]^7 Surveillance d'inactivité démarrée")
+end
+
+function MapRotation.GetRotationInfo()
+    return {
+        activeMaps = activeMaps,
+        totalMaps = #Config.MapRotation.allMaps,
+        idleRotationMinutes = (Config.MapRotation.idleRotationInterval or 3600000) / 60000,
+        rotateOnVictory = Config.MapRotation.rotateOnVictory
+    }
 end

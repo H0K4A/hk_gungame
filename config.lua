@@ -1,23 +1,49 @@
 Config = {}
 
 -- Activer/Désactiver le mode debug
-Config.Debug = true -- Activé pour voir les logs de kills
+Config.Debug = true
 
 -- ============================================================================
--- SYSTÈME DE ROTATION DES MAPS
+-- SYSTÈME DE ROTATION DES MAPS - NOUVEAU SYSTÈME 2 MAPS
 -- ============================================================================
 Config.MapRotation = {
     enabled = true,
-    -- Les 2 maps actuelles en rotation
-    activeMaps = {"ballas", "fourriere", "cayoperico", "fuenteblanca", "chantier", "universite", "pecheur", "motelskatepark", "grapeseed", "casseavion"},
-    -- Rotation automatique toutes les X millisecondes (3600000 = 1 heure)
-    rotationInterval = 3600000,
-    -- Rotation après une victoire (changement immédiat)
-    rotateOnVictory = true
+    
+    -- TOUTES LES MAPS DISPONIBLES (pool de rotation)
+    allMaps = {
+        "ballas", 
+        "fourriere", 
+        "cayoperico", 
+        "fuenteblanca", 
+        "chantier", 
+        "universite", 
+        "pecheur", 
+        "motelskatepark", 
+        "grapeseed", 
+        "casseavion"
+    },
+    
+    -- NOMBRE DE MAPS ACTIVES EN MÊME TEMPS
+    simultaneousMaps = 2,
+    
+    -- Rotation automatique si aucun joueur après X millisecondes (1 heure = 3600000)
+    idleRotationInterval = 3600000, -- 1 heure
+    
+    -- Rotation immédiate après une victoire
+    rotateOnVictory = true,
+    
+    -- Délai avant de changer la map après une victoire (en ms)
+    victoryRotationDelay = 5000, -- 5 secondes
+    
+    -- Si une map devient vide, la remplacer automatiquement
+    rotateEmptyMaps = true,
+    
+    -- Délai avant de remplacer une map vide (en ms)
+    emptyMapRotationDelay = 300000 -- 5 minutes
 }
 
 -- ============================================================================
--- SYSTÈME D'INSTANCES - GUNGAME UNIQUE
+-- SYSTÈME D'INSTANCES
 -- ============================================================================
 Config.InstanceSystem = {
     enabled = true,
@@ -35,27 +61,16 @@ Config.SpawnSystem = {
 }
 
 -- ============================================================================
--- CONFIGURATION DU GUNGAME - NOUVEAU SYSTÈME DE KILLS
+-- CONFIGURATION DU GUNGAME
 -- ============================================================================
 Config.GunGame = {
-    -- Nombre de kills pour passer à l'arme suivante
-    killsPerWeapon = 2, -- 2 kills par arme
-    
-    -- Nombre de kills pour la dernière arme (pour gagner)
-    killsForLastWeapon = 1, -- 1 kill avec la dernière arme
-    
-    -- Délai avant respawn après mort (en ms)
+    killsPerWeapon = 2,
+    killsForLastWeapon = 1,
     respawnDelay = 2000,
-    
-    -- Dégâts et équilibre
     godmodeAfterSpawn = 3000,
     giveAmmoPerSpawn = 500,
-    
-    -- Notification de progression
     notifyOnKill = true,
     notifyOnDeath = true,
-    
-    -- Récompense par arme complétée
     rewardPerWeapon = 2500
 }
 
@@ -112,7 +127,7 @@ Config.WeaponAmmo = {
 }
 
 -- ============================================================================
--- MAPS GUNGAME (Votre configuration existante)
+-- MAPS GUNGAME
 -- ============================================================================
 Config.Maps = {
     ["ballas"] = {
@@ -134,19 +149,16 @@ Config.Maps = {
             {x = 21.402198, y = -1819.424194, z = 25.657104, heading = 31.181102},
             {x = 166.879120, y = -1935.837402, z = 19.776612, heading = 42.519684},
             {x = 148.470336, y = -1901.261596, z = 23.163330, heading = 334.488190},
-            {x = 148.470336, y = -1901.261596, z = 23.163330, heading = 334.488190},
             {x = 144.580216, y = -1843.621948, z = 24.983154, heading = 14.173228},
             {x = 125.775826, y = -1910.769288, z = 20.922364, heading = 53.858268},
             {x = 77.221978, y = -1855.648316, z = 22.405152, heading = 116.220474},
             {x = 2.479120, y = -1895.314332, z = 23.230712, heading = 232.440948},
-            {x = 2.439560, y = -1895.248292, z = 23.247558, heading = 232.440948},
             {x = 29.327474, y = -1825.213134, z = 24.679810, heading = 232.440948},
             {x = 44.769230, y = -1947.309936, z = 21.394166, heading = 215.433074},
             {x = 57.481320, y = -1929.665894, z = 21.495240, heading = 201.259842},
             {x = 119.498902, y = -1923.890136, z = 20.922364, heading = 144.566926},
             {x = 125.683518, y = -1952.650512, z = 20.703248, heading = 17.007874},
             {x = 132.527466, y = -1930.523072, z = 20.989746, heading = 297.637786},
-            {x = 108.989014, y = -1902.303344, z = 21.057128, heading = 345.826782},
             {x = 108.989014, y = -1902.303344, z = 21.057128, heading = 345.826782}
         }
     },
@@ -254,9 +266,9 @@ Config.Maps = {
         name = "Chantier",
         label = "🏗️ Chantier",
         battleZone = {
-            x = 1442.373658,
-            y = 1171.450562,
-            z = 114.320922,
+            x = 64.958252,
+            y = -390.789001,
+            z = 41.125244,
             radius = 150.0
         },
         spawnPoints = {
@@ -318,7 +330,7 @@ Config.Maps = {
 
     ["pecheur"] = {
         name = "Pécheur",
-        label = "🎣 Pèche",
+        label = "🎣 Pêche",
         battleZone = {
             x = 1337.248292,
             y = 4333.846192,
@@ -527,27 +539,20 @@ Config.Commands = {
 -- ============================================================================
 -- CONFIGURATION DES BLIPS JOUEURS
 -- ============================================================================
-
 Config.PlayerBlips = {
-    enabled = true, -- Activer/Désactiver les blips joueurs
-    sprite = 1, -- Sprite du blip (1 = point blanc, 2 = waypoint, etc.)
-    scale = 0.8, -- Taille du blip (0.5 = petit, 1.0 = normal, 1.5 = grand)
-    alpha = 255, -- Transparence (0 = invisible, 255 = opaque)
-    shortRange = true, -- Visible uniquement à courte distance sur la minimap
-    showName = true, -- Afficher le nom du joueur sur le blip
-    
-    -- Couleurs des blips (voir la liste complète ci-dessous)
-    enemyColor = 1, -- Rouge pour les ennemis
-    allyColor = 3, -- Bleu pour les alliés (si vous ajoutez un système de teams)
-    
-    -- Mise à jour des blips
-    updateInterval = 1000, -- Intervalle de mise à jour en ms (1000 = 1 seconde)
-    
-    -- Distance pour l'alpha dynamique
+    enabled = true,
+    sprite = 1,
+    scale = 0.8,
+    alpha = 255,
+    shortRange = true,
+    showName = true,
+    enemyColor = 1,
+    allyColor = 3,
+    updateInterval = 1000,
     fadeDistance = {
-        near = 50, -- Distance proche (alpha max)
-        mid = 100, -- Distance moyenne (alpha moyen)
-        far = 200 -- Distance lointaine (alpha minimum)
+        near = 50,
+        mid = 100,
+        far = 200
     }
 }
 

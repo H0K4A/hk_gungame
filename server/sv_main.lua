@@ -36,7 +36,14 @@ AddEventHandler('onServerResourceStart', function(resourceName)
         print("^2[GunGame Server]^7 Initialisation de la rotation...")
         if MapRotation then
             MapRotation.Initialize()
-            print("^2[GunGame Server]^7 Rotation activée avec " .. #Config.MapRotation.activeMaps .. " maps")
+            local activeMaps = MapRotation.GetActiveMaps()
+            if activeMaps and #activeMaps > 0 then
+                print(string.format("^2[GunGame Server]^7 Rotation activée: %d/%d maps actives", 
+                    #activeMaps, 
+                    #Config.MapRotation.allMaps))
+            else
+                print("^1[GunGame Server]^7 ERREUR: Aucune map active après initialisation!")
+            end
         else
             print("^1[GunGame Server]^7 ERREUR: MapRotation n'est pas défini!")
         end
@@ -45,9 +52,22 @@ AddEventHandler('onServerResourceStart', function(resourceName)
     end
     
     -- Afficher les maps disponibles
-    print("^2[GunGame Server]^7 Maps disponibles:")
-    for mapId, mapData in pairs(Config.Maps) do
-        print(string.format("^3[GunGame Server]^7   - %s (%s)", mapId, mapData.label))
+    if Config.MapRotation and Config.MapRotation.enabled then
+        print("^2[GunGame Server]^7 Maps en rotation:")
+        local activeMaps = MapRotation.GetActiveMaps()
+        if activeMaps then
+            for _, mapId in ipairs(activeMaps) do
+                local mapData = Config.Maps[mapId]
+                print(string.format("^3[GunGame Server]^7   - %s (%s)", mapId, mapData and mapData.label or "Inconnu"))
+            end
+        else
+            print("^1[GunGame Server]^7 ERREUR: Impossible de récupérer les maps actives")
+        end
+    else
+        print("^2[GunGame Server]^7 Toutes les maps disponibles:")
+        for mapId, mapData in pairs(Config.Maps) do
+            print(string.format("^3[GunGame Server]^7   - %s (%s)", mapId, mapData.label))
+        end
     end
     
     print("^2[GunGame Server]^7 ==========================================")
@@ -126,6 +146,17 @@ AddEventHandler('gungame:joinGame', function(mapId)
             type = 'error'
         })
         return
+    end
+
+    if Config.MapRotation.enabled then
+        if not MapRotation.IsMapActive(mapId) then
+            TriggerClientEvent('ox_lib:notify', source, {
+                title = 'Erreur',
+                description = 'Cette map n\'est plus disponible',
+                type = 'error'
+            })
+            return
+        end
     end
     
     local instance = InstanceManager.FindOrCreateInstance(mapId)
@@ -277,6 +308,8 @@ AddEventHandler('gungame:playerKill', function(targetSource)
     local currentWeaponIndex = playerData[source].currentWeapon
     local weaponKills = playerData[source].weaponKills
     local weaponsCount = #Config.Weapons
+
+    InstanceManager.UpdateActivity(instanceId)
     
     -- Déterminer kills requis
     local killsRequired
@@ -503,11 +536,9 @@ function winnerDetected(source, instanceId)
     
     resetInstance(instanceId)
     
-    -- Rotation si activée
     if Config.MapRotation.enabled and Config.MapRotation.rotateOnVictory then
-        SetTimeout(5000, function()
-            MapRotation.RotateToNext()
-        end)
+        local mapId = instance.map
+        MapRotation.OnVictory(mapId)
     end
 end
 
@@ -776,62 +807,75 @@ end)
 -- ============================================================================
 
 RegisterNetEvent('gungame:rotationForcedQuit')
-AddEventHandler('gungame:rotationForcedQuit', function()
-    -- Forcer tous les joueurs à quitter leurs instances
-    local affectedPlayers = {}
+AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
+    -- Si targetSource n'est pas fourni, utiliser source
+    local source = targetSource or source
     
-    -- Collecter tous les joueurs affectés
-    for source, data in pairs(playerData) do
-        if data and data.instanceId and tonumber(source) then
-            table.insert(affectedPlayers, {
-                source = tonumber(source),
-                instanceId = data.instanceId
-            })
+    if not playerData[source] then return end
+    
+    local instanceId = playerData[source].instanceId
+    local data = playerData[source]
+    
+    if data and instanceId then
+        -- Libérer le spawn
+        if SpawnSystem then
+            SpawnSystem.FreeSpawn(instanceId, source)
         end
-    end
-    
-    print("^2[GunGame]^7 Expulsion de " .. #affectedPlayers .. " joueur(s) pour rotation")
-    
-    -- Traiter chaque joueur
-    for _, playerInfo in ipairs(affectedPlayers) do
-        local source = playerInfo.source
-        local instanceId = playerInfo.instanceId
-        local data = playerData[source]
         
-        if data and source and instanceId then
-            -- Libérer le spawn
-            if SpawnSystem then
-                SpawnSystem.FreeSpawn(instanceId, source)
-            end
-            
-            -- Restaurer l'inventaire
-            if playerInventories[source] then
-                SetTimeout(500, function()
-                    restorePlayerInventory(source, playerInventories[source])
-                    playerInventories[source] = nil
-                end)
-            end
-            
-            -- Notifier le joueur
-            TriggerClientEvent('ox_lib:notify', source, {
-                title = '🔄 Rotation de Map',
-                description = 'La map va changer, veuillez quitter',
-                type = 'warning',
-                duration = 4000
-            })
-            
-            -- Déclencher le nettoyage côté client
-            TriggerClientEvent('gungame:clientRotationForceQuit', source)
-            
-            -- Supprimer du serveur après 1 seconde
-            SetTimeout(1000, function()
-                if playerData[source] then
-                    removePlayerFromInstance(source, instanceId)
-                end
+        -- Restaurer l'inventaire
+        if playerInventories[source] then
+            SetTimeout(500, function()
+                restorePlayerInventory(source, playerInventories[source])
+                playerInventories[source] = nil
             end)
         end
+        
+        -- Notifier le joueur
+        TriggerClientEvent('ox_lib:notify', source, {
+            title = '🔄 Changement de Map',
+            description = 'La map va changer, retour au lobby',
+            type = 'warning',
+            duration = 4000
+        })
+        
+        -- Déclencher le nettoyage côté client
+        TriggerClientEvent('gungame:clientRotationForceQuit', source)
+        
+        -- Supprimer du serveur après 1 seconde
+        SetTimeout(1000, function()
+            if playerData[source] then
+                removePlayerFromInstance(source, instanceId)
+            end
+        end)
     end
 end)
+
+-- ============================================================================
+-- COMMANDE ADMIN POUR FORCER LA ROTATION
+-- ============================================================================
+
+RegisterCommand('gg_rotate', function(source, args, rawCommand)
+    if source == 0 then -- Console uniquement
+        if not Config.MapRotation.enabled then
+            print("^1[GunGame]^7 La rotation n'est pas activée")
+            return
+        end
+        
+        local mapId = args[1]
+        
+        if mapId and Config.Maps[mapId] then
+            MapRotation.ReplaceMap(mapId, "Commande admin")
+            print("^2[GunGame]^7 Rotation forcée de la map: " .. mapId)
+        else
+            print("^3[GunGame]^7 Usage: gg_rotate <mapId>")
+            print("^3[GunGame]^7 Maps actives:")
+            for _, activeMapId in ipairs(MapRotation.GetActiveMaps()) do
+                print("^3[GunGame]^7   - " .. activeMapId)
+            end
+        end
+    end
+end, true)
+
 
 -- ============================================================================
 -- CALLBACKS
