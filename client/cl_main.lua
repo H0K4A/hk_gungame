@@ -7,404 +7,37 @@ local playerData = {
     currentWeapon = nil,
     currentWeaponIndex = 0,
     godMode = false,
-    playerName = nil,
     lastSpawnPoint = nil
 }
 
-local hudVisible = true
-local killedEntities = {}
 local zoneBlip = nil
 local radiusBlip = nil
 local currentZoneData = nil
 local playerBlips = {}
 local blipUpdateInterval = 1000
 local lastKillTime = 0
-local killCooldown = 1000 -- 1 seconde entre chaque kill
-local trackedEntities = {}
+local killCooldown = 500 -- 1 seconde entre chaque kill
 local leaderboardData = {}
+local recentKills = {}
+local lastWarningSound = 0
 
 -- ============================================================================
--- COMMANDES
+-- FUNCTIONS
 -- ============================================================================
 
-RegisterCommand('gungame', function()
-    TriggerEvent('gungame:openMenu')
-end, false)
+-- Text3D
+function DrawText3D(x, y, z, text)
+    SetTextScale(0.35, 0.35)
+    SetTextFont(4)
+    SetTextCentre(true)
+    SetTextEntry("STRING")
+    AddTextComponentString(text)
+    SetDrawOrigin(x, y, z, 0)
+    DrawText(0.0, 0.0)
+    ClearDrawOrigin()
+end
 
--- ============================================================================
--- NETTOYAGE À LA SORTIE DU JEU
--- ============================================================================
-
-RegisterCommand('leavegame', function()
-    if playerData.inGame then
-        local ped = PlayerPedId()
-        local lastSpawn = playerData.lastSpawnPoint
-        
-        -- Fade out pour transition propre
-        DoScreenFadeOut(500)
-        while not IsScreenFadedOut() do Wait(0) end
-        
-        -- Nettoyer l'état
-        playerData.inGame = false
-        playerData.instanceId = nil
-        playerData.mapId = nil
-        playerData.kills = 0
-        playerData.weaponKills = 0
-        playerData.currentWeapon = nil
-        
-        -- Retirer armes et UI
-        RemoveAllPedWeapons(ped, true)
-        lib.hideTextUI()
-        removeGunGameZoneBlip()
-        RemoveAllPlayerBlips()
-        
-        -- ✅ NOUVEAU : TP AMÉLIORÉ avec vérification
-        if lastSpawn then
-            print(string.format("^2[GunGame]^7 Retour à la position: %.2f, %.2f, %.2f", 
-                lastSpawn.x, lastSpawn.y, lastSpawn.z))
-            
-            -- TP avec tous les flags pour éviter les bugs
-            SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
-            
-            -- Attendre que le TP soit effectif
-            Wait(300)
-            
-            -- Vérifier que le TP a bien fonctionné
-            local newCoords = GetEntityCoords(ped)
-            local distance = #(vector3(lastSpawn.x, lastSpawn.y, lastSpawn.z) - newCoords)
-            
-            if distance > 5.0 then
-                print("^3[GunGame]^7 TP initial raté, nouvelle tentative...")
-                SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
-                Wait(200)
-            end
-            
-            -- S'assurer que le joueur est bien au sol
-            SetPedCoordsKeepVehicle(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z)
-            
-            -- Nettoyer les tâches pour éviter les animations bizarres
-            ClearPedTasksImmediately(ped)
-        else
-            print("^1[GunGame]^7 ERREUR: Aucune position sauvegardée!")
-            
-            -- Fallback : TP à l'hôpital
-            SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
-            Wait(200)
-        end
-        
-        -- Fade in
-        DoScreenFadeIn(700)
-        
-        -- Attendre un peu avant d'informer le serveur
-        Wait(300)
-        TriggerServerEvent('gungame:leaveGame')
-        
-        lib.notify({
-            title = 'GunGame',
-            description = 'Vous avez quitté la partie',
-            type = 'inform',
-            duration = 2000
-        })
-        
-        -- Réinitialiser la position sauvegardée
-        playerData.lastSpawnPoint = nil
-    else
-        lib.notify({
-            title = 'Erreur',
-            description = 'Vous n\'êtes pas en partie',
-            type = 'error'
-        })
-    end
-end, false)
-RegisterCommand('togglehud', function()
-    hudVisible = not hudVisible
-    
-    lib.notify({
-        title = 'HUD',
-        description = hudVisible and 'HUD activé' or 'HUD désactivé',
-        type = hudVisible and 'success' or 'inform'
-    })
-    
-    if not hudVisible then
-        lib.hideTextUI()
-    end
-end, false)
-
-Citizen.CreateThread(function()
-    Wait(1000)
-    TriggerEvent('chat:addSuggestion', '/gungame', 'Ouvrir le menu GunGame', {})
-    TriggerEvent('chat:addSuggestion', '/leavegame', 'Quitter la partie GunGame', {})
-    TriggerEvent('chat:addSuggestion', '/togglehud', 'Affiche/Masque le HUD', {})
-end)
-
--- ============================================================================
--- MENU PRINCIPAL
--- ============================================================================
-
-RegisterNetEvent('gungame:openMenu')
-AddEventHandler('gungame:openMenu', function()
-    
-    print("^2[GunGame Client]^7 Ouverture du menu...")
-    
-    if not lib then
-        print("^1[GunGame Client]^7 ERREUR: ox_lib n'est pas chargé!")
-        TriggerEvent('chat:addMessage', {
-            color = {255, 0, 0},
-            multiline = true,
-            args = {"GunGame", "Erreur: ox_lib n'est pas chargé"}
-        })
-        return
-    end
-    
-    if not lib.callback then
-        print("^1[GunGame Client]^7 ERREUR: lib.callback n'existe pas!")
-        TriggerEvent('chat:addMessage', {
-            color = {255, 0, 0},
-            multiline = true,
-            args = {"GunGame", "Erreur: lib.callback n'existe pas"}
-        })
-        return
-    end
-    
-    print("^2[GunGame Client]^7 Appel du callback getAvailableGames...")
-    
-    -- Récupérer les parties disponibles
-    lib.callback('gungame:getAvailableGames', false, function(games)
-        print("^2[GunGame Client]^7 Callback reçu!")
-        
-        if not games then
-            print("^1[GunGame Client]^7 ERREUR: games est nil")
-            lib.notify({
-                title = 'Erreur',
-                description = 'Impossible de récupérer les parties',
-                type = 'error'
-            })
-            return
-        end
-        
-        print(string.format("^2[GunGame Client]^7 %d partie(s) disponible(s)", #games))
-        
-        -- Debug: afficher les parties
-        for i, game in ipairs(games) do
-            print(string.format("^3[GunGame Client]^7 [%d] %s - %d/%d joueurs", 
-                i, game.label or "???", game.currentPlayers or 0, game.maxPlayers or 0))
-        end
-        
-        local options = {}
-        
-        -- Créer les options du menu
-        for _, game in ipairs(games) do
-            local isFull = game.currentPlayers >= game.maxPlayers
-            local icon = isFull and "fa-solid fa-lock" or "fa-solid fa-gamepad"
-            local desc = ('Joueurs: %d/%d'):format(game.currentPlayers, game.maxPlayers)
-            
-            if isFull then
-                desc = desc .. ' [PLEIN]'
-            end
-            
-            table.insert(options, {
-                title = game.label,
-                description = desc,
-                icon = icon,
-                disabled = isFull,
-                onSelect = function()
-                    print(string.format("^2[GunGame Client]^7 Sélection de la map: %s", game.mapId))
-                    
-                    lib.notify({
-                        title = 'GunGame',
-                        description = 'Connexion à ' .. game.label .. '...',
-                        type = 'inform',
-                        duration = 2000
-                    })
-                    
-                    TriggerServerEvent('gungame:joinGame', game.mapId)
-                end
-            })
-        end
-        
-        if #options == 0 then
-            print("^1[GunGame Client]^7 ERREUR: Aucune option dans le menu!")
-            
-            lib.notify({
-                title = 'Erreur',
-                description = 'Aucune partie disponible',
-                type = 'error'
-            })
-            return
-        end
-        
-        -- Séparateur
-        table.insert(options, {
-            title = '─────────────────',
-            description = '',
-            icon = 'fa-solid fa-minus',
-            disabled = true
-        })
-        
-        -- Option fermer
-        table.insert(options, {
-            title = 'Fermer le menu',
-            icon = 'fa-solid fa-xmark',
-            onSelect = function()
-                print("^2[GunGame Client]^7 Menu fermé")
-            end
-        })
-        
-        print(string.format("^2[GunGame Client]^7 Enregistrement du menu avec %d options", #options))
-        
-        -- Enregistrer et afficher le menu
-        lib.registerContext({
-            id = 'gungame_main_menu',
-            title = '🔫 GunGame - Sélectionnez une Map',
-            options = options
-        })
-        
-        print("^2[GunGame Client]^7 Affichage du menu...")
-        lib.showContext('gungame_main_menu')
-        
-        print("^2[GunGame Client]^7 Menu affiché avec succès!")
-    end)
-end)
-
--- ============================================================================
--- ÉVÉNEMENTS ARMES
--- ============================================================================
-
-RegisterNetEvent('gungame:equipWeapon')
-AddEventHandler('gungame:equipWeapon', function(weapon)
-    local ped = PlayerPedId()
-    local weaponHash = GetHashKey(weapon)
-    
-    Wait(500)
-    TriggerServerEvent('ox_inventory:useItem', weapon:lower(), nil)
-    
-    SetTimeout(400, function()
-        if HasPedGotWeapon(ped, weaponHash, false) then
-            SetCurrentPedWeapon(ped, weaponHash, true)
-            local maxAmmo = GetMaxAmmo(ped, weaponHash)
-            SetPedAmmo(ped, weaponHash, maxAmmo)
-        else
-            SetTimeout(1000, function()
-                if playerData.inGame then
-                    TriggerServerEvent('gungame:requestCurrentWeapon')
-                end
-            end)
-        end
-    end)
-    
-    playerData.currentWeapon = weapon
-end)
-
-RegisterNetEvent('gungame:clearWeapons')
-AddEventHandler('gungame:clearWeapons', function()
-    RemoveAllPedWeapons(PlayerPedId(), true)
-end)
-
-RegisterNetEvent('gungame:clearAllInventory')
-AddEventHandler('gungame:clearAllInventory', function()
-    TriggerEvent('ox_inventory:disarm', true)
-    Wait(200)
-    RemoveAllPedWeapons(PlayerPedId(), true)
-end)
-
--- ============================================================================
--- TÉLÉPORTATION AU JEU
--- ============================================================================
-
--- Quand on rejoint une partie
-RegisterNetEvent('gungame:teleportToGame')
-AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
-    print("^5[GunGame DEBUG]^7 TELEPORT EVENT RECU !")
-    local ped = PlayerPedId()
-    local spawnPoint = spawn or Config.Maps[mapId].spawnPoints[1]
-
-    if not spawnPoint then
-        print("^1[GunGame]^7 ERREUR: Aucun spawn valide reçu")
-        return
-    end
-
-    -- ✅ NOUVEAU : SAUVEGARDER LA POSITION AVANT TP
-    local currentCoords = GetEntityCoords(ped)
-    playerData.lastSpawnPoint = {
-        x = currentCoords.x,
-        y = currentCoords.y,
-        z = currentCoords.z
-    }
-    
-    print(string.format("^2[GunGame]^7 Position sauvegardée: %.2f, %.2f, %.2f", 
-        currentCoords.x, currentCoords.y, currentCoords.z))
-
-    -- Marquer l'état
-    playerData.inGame = true
-    playerData.instanceId = instanceId
-    playerData.mapId = mapId
-    playerData.kills = 0
-    playerData.weaponKills = 0
-    playerData.currentWeaponIndex = 1
-
-    -- Transition propre
-    DoScreenFadeOut(500)
-    while not IsScreenFadedOut() do Wait(0) end
-
-    -- Attendre que le routing bucket soit bien actif
-    Wait(300)
-
-    -- TP propre
-    SetEntityCoords(ped, spawnPoint.x, spawnPoint.y, spawnPoint.z, false, false, false, true)
-    SetEntityHeading(ped, spawnPoint.heading or 0.0)
-    SetGameplayCamRelativeHeading(0.0)
-
-    -- Anti "walking after TP"
-    Wait(200)
-    ClearPedTasksImmediately(ped)
-
-    -- Rétablissement
-    DoScreenFadeIn(700)
-
-    -- Sécurité : god mode au spawn
-    enableGodMode()
-
-    -- Blip + notif
-    createGunGameZoneBlip(mapId)
-    lib.notify({
-        title = 'GunGame',
-        description = 'Vous avez rejoint ' .. Config.Maps[mapId].label,
-        type = 'success',
-        duration = 3000
-    })
-
-    -- Informer le serveur
-    TriggerServerEvent('gungame:playerEnteredInstance', instanceId, mapId)
-end)
-
-
--- ============================================================================
--- RESPAWN
--- ============================================================================
-
-RegisterNetEvent('gungame:teleportBeforeRevive')
-AddEventHandler('gungame:teleportBeforeRevive', function(spawn)
-    local ped = PlayerPedId()
-    
-    -- Option A : Téléportation brutale sans écran noir
-    -- Désactiver temporairement le rendu pour éviter les glitches visuels
-    DoScreenFadeOut(0) -- Fade out instantané (0ms)
-    
-    SetEntityCoords(ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
-    SetEntityHeading(ped, spawn.heading)
-    
-    -- Attendre 100ms que la position soit bien définie
-    Wait(100)
-end)
-
-RegisterNetEvent('gungame:activateGodMode')
-AddEventHandler('gungame:activateGodMode', function()
-    enableGodMode()
-end)
-
--- ============================================================================
 -- GODMODE TEMPORAIRE
--- ============================================================================
 
 function enableGodMode()
     playerData.godMode = true
@@ -418,19 +51,7 @@ function enableGodMode()
     end)
 end
 
--- ============================================================================
 -- HUD IN-GAME
--- ============================================================================
-
-Citizen.CreateThread(function()
-    while true do
-        Wait(0)
-        
-        if playerData.inGame and hudVisible and Config.HUD.enabled then
-            drawGunGameHUD()
-        end
-    end
-end)
 
 function drawGunGameHUD()
     local mapId = playerData.mapId
@@ -600,15 +221,10 @@ function drawGunGameHUD()
         currentY = currentY + lineHeight + 0.004
     end
     
-    -- ========================================================================
-    -- 🏆 LEADERBOARD (NOUVEAU)
-    -- ========================================================================
+    -- 🏆 LEADERBOARD
     
     if leaderboardData and #leaderboardData > 0 then
-        -- Séparateur
-        --DrawRect(startX + boxWidth/2, currentY, boxWidth - 0.02, 0.001, 0, 255, 136, 200)
-        --currentY = currentY + 0.050
-        
+
         -- Titre LEADERBOARD
         SetTextFont(4)
         SetTextScale(0.0, 0.32)
@@ -733,9 +349,7 @@ function drawGunGameHUD()
         end
     end
     
-    -- ========================================================================
     -- GODMODE (à la fin)
-    -- ========================================================================
     
     if godMode then
         currentY = startY + boxHeight - 0.045
@@ -754,9 +368,446 @@ function drawGunGameHUD()
     end
 end
 
+function GetEntityPlayerIsFreeAimingAt(player)
+    local aimCoord = GetGameplayCamCoord()
+    local farAhead = GetOffsetFromEntityInWorldCoords(aimCoord, 0.0, 100.0, 0.0)
+    
+    local rayHandle = StartShapeTestRay(
+        aimCoord.x, aimCoord.y, aimCoord.z,
+        farAhead.x, farAhead.y, farAhead.z,
+        10, PlayerPedId(), 7
+    )
+    
+    local hit, endCoords, surfaceNormal, entityHit = GetShapeTestResult(rayHandle)
+    return hit, entityHit
+end
+
+-- CRÉATION DU BLIP ET DU RAYON
+
+function createGunGameZoneBlip(mapId)
+    if not Config.Minimap or not Config.Minimap.showZone then return end
+    
+    removeGunGameZoneBlip()
+    
+    local mapData = Config.Maps[mapId]
+    if not mapData or not mapData.battleZone then return end
+    
+    local zone = mapData.battleZone
+    currentZoneData = {
+        x = zone.x,
+        y = zone.y,
+        z = zone.z,
+        radius = zone.radius,
+        mapName = mapData.name
+    }
+    
+    if Config.Minimap.radius.enabled then
+        radiusBlip = AddBlipForRadius(zone.x, zone.y, zone.z, zone.radius)
+        SetBlipRotation(radiusBlip, 0)
+        SetBlipColour(radiusBlip, Config.Minimap.radius.color)
+        SetBlipAlpha(radiusBlip, Config.Minimap.radius.alpha)
+    end
+end
+
+-- SUPPRESSION DU BLIP
+
+function removeGunGameZoneBlip()
+    if zoneBlip then
+        RemoveBlip(zoneBlip)
+        zoneBlip = nil
+    end
+    
+    if radiusBlip then
+        RemoveBlip(radiusBlip)
+        radiusBlip = nil
+    end
+    
+    currentZoneData = nil
+end
+
+-- FONCTION DE TEXTE 3D AMÉLIORÉE
+
+function DrawText3DZone(x, y, z, text)
+    local onScreen, _x, _y = World3dToScreen2d(x, y, z)
+    local px, py, pz = table.unpack(GetGameplayCamCoords())
+    local dist = #(vector3(px, py, pz) - vector3(x, y, z))
+    
+    if onScreen and dist < 300 then
+        local scale = (1 / dist) * 2
+        local fov = (1 / GetGameplayCamFov()) * 100
+        scale = scale * fov * Config.Minimap.text3D.scale
+        
+        SetTextScale(0.0, scale)
+        SetTextFont(Config.Minimap.text3D.font)
+        SetTextProportional(1)
+        SetTextColour(
+            Config.Minimap.text3D.color.r,
+            Config.Minimap.text3D.color.g,
+            Config.Minimap.text3D.color.b,
+            Config.Minimap.text3D.color.a
+        )
+        SetTextDropshadow(0, 0, 0, 0, 255)
+        SetTextEdge(2, 0, 0, 0, 150)
+        SetTextDropShadow()
+        SetTextOutline()
+        SetTextEntry("STRING")
+        SetTextCentre(1)
+        AddTextComponentString(text)
+        DrawText(_x, _y)
+    end
+end
+
+-- CRÉER UN BLIP POUR UN JOUEUR
+
+function CreatePlayerBlip(playerId)
+    local playerPed = GetPlayerPed(playerId)
+    if not DoesEntityExist(playerPed) then return end
+    
+    -- Supprimer l'ancien blip s'il existe
+    if playerBlips[playerId] then
+        RemoveBlip(playerBlips[playerId])
+    end
+    
+    -- Créer le nouveau blip
+    local blip = AddBlipForEntity(playerPed)
+    
+    if blip then
+        SetBlipSprite(blip, Config.PlayerBlips and Config.PlayerBlips.sprite or 1)
+        SetBlipColour(blip, Config.PlayerBlips and Config.PlayerBlips.enemyColor or 1)
+        SetBlipScale(blip, Config.PlayerBlips and Config.PlayerBlips.scale or 0.8)
+        SetBlipAsShortRange(blip, Config.PlayerBlips and Config.PlayerBlips.shortRange or true)
+        SetBlipAlpha(blip, Config.PlayerBlips and Config.PlayerBlips.alpha or 255)
+        
+        -- Afficher le nom du joueur
+        if Config.PlayerBlips and Config.PlayerBlips.showName then
+            local playerName = GetPlayerName(playerId)
+            BeginTextCommandSetBlipName("STRING")
+            AddTextComponentString(playerName)
+            EndTextCommandSetBlipName(blip)
+        end
+        
+        playerBlips[playerId] = blip
+    end
+end
+
+-- SUPPRIMER UN BLIP JOUEUR
+
+function RemovePlayerBlip(playerId)
+    if playerBlips[playerId] then
+        RemoveBlip(playerBlips[playerId])
+        playerBlips[playerId] = nil
+    end
+end
+
+-- SUPPRIMER TOUS LES BLIPS
+
+function RemoveAllPlayerBlips()
+    for playerId, blip in pairs(playerBlips) do
+        if DoesBlipExist(blip) then
+            RemoveBlip(blip)
+        end
+    end
+    playerBlips = {}
+end
+
+-- MISE À JOUR DES BLIPS
+
+function UpdatePlayerBlips()
+    if not playerData.inGame then
+        RemoveAllPlayerBlips()
+        return
+    end
+    
+    -- Ne rien faire si le système de blips est désactivé
+    if Config.PlayerBlips and not Config.PlayerBlips.enabled then
+        return
+    end
+    
+    local localPlayerId = PlayerId()
+    local instance = playerData.instanceId
+    
+    -- Parcourir tous les joueurs
+    for i = 0, 255 do
+        if i ~= localPlayerId and NetworkIsPlayerActive(i) then
+            local targetPed = GetPlayerPed(i)
+            
+            if DoesEntityExist(targetPed) then
+                if not playerBlips[i] then
+                    CreatePlayerBlip(i)
+                else
+                    -- Mettre à jour le blip existant
+                    local blip = playerBlips[i]
+                    if DoesBlipExist(blip) then
+                        local playerCoords = GetEntityCoords(PlayerPedId())
+                        local targetCoords = GetEntityCoords(targetPed)
+                        local distance = #(playerCoords - targetCoords)
+                        
+                        -- Exemple: changer l'alpha selon la distance
+                        if distance < 50 then
+                            SetBlipAlpha(blip, 255)
+                        elseif distance < 100 then
+                            SetBlipAlpha(blip, 200)
+                        else
+                            SetBlipAlpha(blip, 150)
+                        end
+                    end
+                end
+            else
+                -- Supprimer le blip si le joueur n'existe plus
+                RemovePlayerBlip(i)
+            end
+        else
+            -- Supprimer le blip si le joueur n'est plus actif
+            RemovePlayerBlip(i)
+        end
+    end
+end
+
+
+
+
+
 -- ============================================================================
+-- REGISTER EVENTS
+-- ============================================================================
+
+
+
+
+
+-- MENU PRINCIPAL
+
+RegisterNetEvent('gungame:openMenu')
+AddEventHandler('gungame:openMenu', function()
+    
+    if not lib then
+        print("^1[GunGame Client]^7 ERREUR: ox_lib n'est pas chargé!")
+        TriggerEvent('chat:addMessage', {
+            color = {255, 0, 0},
+            multiline = true,
+            args = {"GunGame", "Erreur: ox_lib n'est pas chargé"}
+        })
+        return
+    end
+    
+    if not lib.callback then
+        print("^1[GunGame Client]^7 ERREUR: lib.callback n'existe pas!")
+        TriggerEvent('chat:addMessage', {
+            color = {255, 0, 0},
+            multiline = true,
+            args = {"GunGame", "Erreur: lib.callback n'existe pas"}
+        })
+        return
+    end
+    
+    -- Récupérer les parties disponibles
+    lib.callback('gungame:getAvailableGames', false, function(games)
+        
+        if not games then
+            print("^1[GunGame Client]^7 ERREUR: games est nil")
+            lib.notify({
+                title = 'Erreur',
+                description = 'Impossible de récupérer les parties',
+                type = 'error'
+            })
+            return
+        end
+        
+        local options = {}
+        
+        -- Créer les options du menu
+        for _, game in ipairs(games) do
+            local isFull = game.currentPlayers >= game.maxPlayers
+            local icon = isFull and "fa-solid fa-lock" or "fa-solid fa-gamepad"
+            local desc = ('Joueurs: %d/%d'):format(game.currentPlayers, game.maxPlayers)
+            
+            if isFull then
+                desc = desc .. ' [PLEIN]'
+            end
+            
+            table.insert(options, {
+                title = game.label,
+                description = desc,
+                icon = icon,
+                disabled = isFull,
+                onSelect = function()
+                    
+                    lib.notify({
+                        title = 'GunGame',
+                        description = 'Connexion à ' .. game.label .. '...',
+                        type = 'inform',
+                        duration = 2000
+                    })
+                    
+                    TriggerServerEvent('gungame:joinGame', game.mapId)
+                end
+            })
+        end
+        
+        if #options == 0 then
+            print("^1[GunGame Client]^7 ERREUR: Aucune option dans le menu!")
+            
+            lib.notify({
+                title = 'Erreur',
+                description = 'Aucune partie disponible',
+                type = 'error'
+            })
+            return
+        end
+        
+        -- Séparateur
+        table.insert(options, {
+            title = '─────────────────',
+            description = '',
+            icon = 'fa-solid fa-minus',
+            disabled = true
+        })
+        
+        -- Option fermer
+        table.insert(options, {
+            title = 'Fermer le menu',
+            icon = 'fa-solid fa-xmark',
+            onSelect = function()
+            end
+        })
+        
+        -- Enregistrer et afficher le menu
+        lib.registerContext({
+            id = 'gungame_main_menu',
+            title = '🔫 GunGame - Sélectionnez une Map',
+            options = options
+        })
+        
+        lib.showContext('gungame_main_menu')
+    end)
+end)
+
+-- ÉVÉNEMENTS ARMES
+
+RegisterNetEvent('gungame:equipWeapon')
+AddEventHandler('gungame:equipWeapon', function(weapon)
+    local ped = PlayerPedId()
+    local weaponHash = GetHashKey(weapon)
+    
+    Wait(500)
+    TriggerServerEvent('ox_inventory:useItem', weapon:lower(), nil)
+    
+    SetTimeout(400, function()
+        if HasPedGotWeapon(ped, weaponHash, false) then
+            SetCurrentPedWeapon(ped, weaponHash, true)
+            local maxAmmo = GetMaxAmmo(ped, weaponHash)
+            SetPedAmmo(ped, weaponHash, maxAmmo)
+        else
+            SetTimeout(1000, function()
+                if playerData.inGame then
+                    TriggerServerEvent('gungame:requestCurrentWeapon')
+                end
+            end)
+        end
+    end)
+    
+    playerData.currentWeapon = weapon
+end)
+
+RegisterNetEvent('gungame:clearWeapons')
+AddEventHandler('gungame:clearWeapons', function()
+    RemoveAllPedWeapons(PlayerPedId(), true)
+end)
+
+RegisterNetEvent('gungame:clearAllInventory')
+AddEventHandler('gungame:clearAllInventory', function()
+    TriggerEvent('ox_inventory:disarm', true)
+    Wait(200)
+    RemoveAllPedWeapons(PlayerPedId(), true)
+end)
+
+-- TÉLÉPORTATION AU JEU
+
+-- Quand on rejoint une partie
+RegisterNetEvent('gungame:teleportToGame')
+AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
+    local ped = PlayerPedId()
+    local spawnPoint = spawn or Config.Maps[mapId].spawnPoints[1]
+
+    if not spawnPoint then
+        print("^1[GunGame]^7 ERREUR: Aucun spawn valide reçu")
+        return
+    end
+
+    -- SAUVEGARDER LA POSITION AVANT TP
+    local currentCoords = GetEntityCoords(ped)
+    playerData.lastSpawnPoint = {
+        x = currentCoords.x,
+        y = currentCoords.y,
+        z = currentCoords.z
+    }
+
+    -- Marquer l'état
+    playerData.inGame = true
+    playerData.instanceId = instanceId
+    playerData.mapId = mapId
+    playerData.kills = 0
+    playerData.weaponKills = 0
+    playerData.currentWeaponIndex = 1
+
+    -- Transition propre
+    DoScreenFadeOut(500)
+    while not IsScreenFadedOut() do Wait(0) end
+
+    -- Attendre que le routing bucket soit bien actif
+    Wait(300)
+
+    -- TP propre
+    SetEntityCoords(ped, spawnPoint.x, spawnPoint.y, spawnPoint.z, false, false, false, true)
+    SetEntityHeading(ped, spawnPoint.heading or 0.0)
+    SetGameplayCamRelativeHeading(0.0)
+
+    -- Anti "walking after TP"
+    Wait(200)
+    ClearPedTasksImmediately(ped)
+
+    -- Rétablissement
+    DoScreenFadeIn(700)
+
+    -- Sécurité : god mode au spawn
+    enableGodMode()
+
+    -- Blip + notif
+    createGunGameZoneBlip(mapId)
+    lib.notify({
+        title = 'GunGame',
+        description = 'Vous avez rejoint ' .. Config.Maps[mapId].label,
+        type = 'success',
+        duration = 3000
+    })
+
+    -- Informer le serveur
+    TriggerServerEvent('gungame:playerEnteredInstance', instanceId, mapId)
+end)
+
+-- RESPAWN
+
+RegisterNetEvent('gungame:teleportBeforeRevive')
+AddEventHandler('gungame:teleportBeforeRevive', function(spawn)
+    local ped = PlayerPedId()
+    
+    -- Option A : Téléportation brutale sans écran noir
+    -- Désactiver temporairement le rendu pour éviter les glitches visuels
+    DoScreenFadeOut(0) -- Fade out instantané (0ms)
+    
+    SetEntityCoords(ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
+    SetEntityHeading(ped, spawn.heading)
+    
+    -- Attendre 100ms que la position soit bien définie
+    Wait(100)
+end)
+
+RegisterNetEvent('gungame:activateGodMode')
+AddEventHandler('gungame:activateGodMode', function()
+    enableGodMode()
+end)
+
 -- SYNCHRONISATION DU LEADERBOARD
--- ============================================================================
 
 RegisterNetEvent('gungame:syncLeaderboard')
 AddEventHandler('gungame:syncLeaderboard', function(data)
@@ -767,31 +818,7 @@ AddEventHandler('gungame:syncLeaderboard', function(data)
     end
 end)
 
--- ============================================================================
--- DÉTECTION DES KILLS - VERSION SIMPLIFIÉE ET FONCTIONNELLE
--- ============================================================================
-
-local lastKillTime = 0
-local killCooldown = 500 -- Réduit à 500ms pour meilleure réactivité
-local recentKills = {} -- Cache des kills récents pour éviter doublons
-
--- Nettoyer le cache des kills toutes les 2 secondes
-Citizen.CreateThread(function()
-    while true do
-        Wait(2000)
-        local currentTime = GetGameTimer()
-        
-        for victim, killTime in pairs(recentKills) do
-            if currentTime - killTime > 2000 then
-                recentKills[victim] = nil
-            end
-        end
-    end
-end)
-
--- ============================================================================
--- MÉTHODE 1 : gameEventTriggered (PRIORITAIRE)
--- ============================================================================
+-- gameEventTriggered (KILLS)
 
 AddEventHandler('gameEventTriggered', function(eventName, data)
     if not playerData.inGame then return end
@@ -826,8 +853,6 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
         lastKillTime = currentTime
         recentKills[victim] = currentTime
         
-        print("^2[GunGame Kill]^7 ✅ Kill détecté!")
-        
         -- Différencier joueur/bot
         if IsPedAPlayer(victim) then
             local targetPlayerId = NetworkGetPlayerIndexFromPed(victim)
@@ -843,62 +868,8 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
     end
 end)
 
--- ============================================================================
--- MÉTHODE 2 : Détection par HasEntityBeenDamagedByWeapon (BACKUP)
--- ============================================================================
-
-Citizen.CreateThread(function()
-    while true do
-        Wait(100)
-        
-        if playerData.inGame then
-            local playerPed = PlayerPedId()
-            local playerWeapon = GetSelectedPedWeapon(playerPed)
-            
-            -- Scanner tous les peds proches
-            local coords = GetEntityCoords(playerPed)
-            local nearbyPeds = GetGamePool('CPed')
-            
-            for _, ped in ipairs(nearbyPeds) do
-                if ped ~= playerPed and DoesEntityExist(ped) then
-                    -- Vérifier si on a tué ce ped avec notre arme
-                    if HasEntityBeenDamagedByWeapon(ped, playerWeapon, 0) then
-                        if IsEntityDead(ped) and not recentKills[ped] then
-                            local currentTime = GetGameTimer()
-                            
-                            if currentTime - lastKillTime > killCooldown then
-                                lastKillTime = currentTime
-                                recentKills[ped] = currentTime
-                                
-                                print("^3[GunGame Backup]^7 Kill détecté via HasEntityBeenDamaged")
-                                
-                                if IsPedAPlayer(ped) then
-                                    local targetPlayerId = NetworkGetPlayerIndexFromPed(ped)
-                                    if targetPlayerId ~= -1 then
-                                        local targetServerId = GetPlayerServerId(targetPlayerId)
-                                        TriggerServerEvent('gungame:registerKill', targetServerId, false)
-                                    end
-                                else
-                                    TriggerServerEvent('gungame:registerKill', nil, true)
-                                end
-                            end
-                        end
-                        
-                        -- Nettoyer le flag de dégâts
-                        ClearEntityLastDamageEntity(ped)
-                    end
-                end
-            end
-        else
-            Wait(1000)
-        end
-    end
-end)
-
 RegisterNetEvent('gungame:syncWeaponKills')
 AddEventHandler('gungame:syncWeaponKills', function(newKillCount)
-    print(string.format("^2[GunGame Sync]^7 Kills: %d -> %d", 
-        playerData.weaponKills or 0, newKillCount))
     
     playerData.weaponKills = newKillCount
     
@@ -922,91 +893,18 @@ end)
 
 RegisterNetEvent('gungame:resetWeaponKills')
 AddEventHandler('gungame:resetWeaponKills', function()
-    print("^2[GunGame]^7 Reset weaponKills -> 0")
     playerData.weaponKills = 0
     recentKills = {} -- Vider le cache
 end)
 
 RegisterNetEvent('gungame:updateWeaponIndex')
 AddEventHandler('gungame:updateWeaponIndex', function(newIndex)
-    print(string.format("^2[GunGame]^7 Arme: %d -> %d", 
-        playerData.currentWeaponIndex or 0, newIndex))
     playerData.currentWeaponIndex = newIndex
     playerData.weaponKills = 0
     recentKills = {} -- Vider le cache lors du changement d'arme
 end)
 
--- ============================================================================
--- DÉTECTION DES MORTS
--- ============================================================================
-
-Citizen.CreateThread(function()
-    local isDead = false
-    
-    while true do
-        Wait(100)
-        
-        if playerData.inGame then
-            local ped = PlayerPedId()
-            local health = GetEntityHealth(ped)
-            
-            if health <= 105 and not isDead then
-                isDead = true
-                
-                TriggerServerEvent('gungame:playerDeath')
-                
-                lib.notify({
-                    title = '💀 Mort',
-                    description = 'Vous allez respawn...',
-                    type = 'error',
-                    duration = 3000
-                })
-                
-                SetTimeout(5000, function()
-                    isDead = false
-                end)
-            end
-        else
-            isDead = false
-        end
-    end
-end)
-
--- ============================================================================
--- VÉRIFICATION ZONE
--- ============================================================================
-
-Citizen.CreateThread(function()
-    while true do
-        Wait(1000)
-        
-        if playerData.inGame then
-            local ped = PlayerPedId()
-            local coords = GetEntityCoords(ped)
-            local mapData = Config.Maps[playerData.mapId]
-            
-            if mapData then
-                local zone = mapData.battleZone
-                local distance = #(coords - vector3(zone.x, zone.y, zone.z))
-                
-                if distance > zone.radius + 50 then
-                    SetEntityCoords(ped, zone.x, zone.y, zone.z, false, false, false, false)
-                    
-                    lib.notify({
-                        title = 'Zone',
-                        description = 'Hors de la zone de combat',
-                        type = 'warning'
-                    })
-                end
-            end
-        end
-    end
-end)
-
-
--- ============================================================================
 -- ÉVÉNEMENT : VICTOIRE
--- ============================================================================
 
 RegisterNetEvent('gungame:playerWon')
 AddEventHandler('gungame:playerWon', function(winnerName, reward)
@@ -1042,8 +940,6 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
         
         -- ✅ TP AMÉLIORÉ
         if lastSpawn then
-            print(string.format("^2[GunGame Victory]^7 Retour position: %.2f, %.2f, %.2f", 
-                lastSpawn.x, lastSpawn.y, lastSpawn.z))
             
             SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
             Wait(300)
@@ -1070,74 +966,319 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
     end)
 end)
 
--- ============================================================================
--- FONCTION UTILITAIRE
--- ============================================================================
+-- ÉVÉNEMENT: MISE À JOUR DE LA LISTE DES JOUEURS
 
-function GetEntityPlayerIsFreeAimingAt(player)
-    local aimCoord = GetGameplayCamCoord()
-    local farAhead = GetOffsetFromEntityInWorldCoords(aimCoord, 0.0, 100.0, 0.0)
+RegisterNetEvent('gungame:updatePlayerList')
+AddEventHandler('gungame:updatePlayerList', function(playersList)
+    if not playerData.inGame then return end
     
-    local rayHandle = StartShapeTestRay(
-        aimCoord.x, aimCoord.y, aimCoord.z,
-        farAhead.x, farAhead.y, farAhead.z,
-        10, PlayerPedId(), 7
-    )
+    -- Supprimer les blips des joueurs qui ne sont plus dans la liste
+    local localServerId = GetPlayerServerId(PlayerId())
     
-    local hit, endCoords, surfaceNormal, entityHit = GetShapeTestResult(rayHandle)
-    return hit, entityHit
-end
+    for playerId, blip in pairs(playerBlips) do
+        local playerServerId = GetPlayerServerId(playerId)
+        local stillInGame = false
+        
+        for _, serverId in ipairs(playersList) do
+            if serverId == playerServerId then
+                stillInGame = true
+                break
+            end
+        end
+        
+        if not stillInGame then
+            RemovePlayerBlip(playerId)
+        end
+    end
+    
+    -- Créer les blips pour les nouveaux joueurs
+    for _, serverId in ipairs(playersList) do
+        if serverId ~= localServerId then
+            -- Trouver le playerId depuis le serverId
+            for i = 0, 255 do
+                if NetworkIsPlayerActive(i) and GetPlayerServerId(i) == serverId then
+                    if not playerBlips[i] then
+                        CreatePlayerBlip(i)
+                    end
+                    break
+                end
+            end
+        end
+    end
+end)
 
--- ============================================================================
--- CRÉATION DU BLIP ET DU RAYON
--- ============================================================================
+-- ROTATION DE MAP
 
-function createGunGameZoneBlip(mapId)
-    if not Config.Minimap or not Config.Minimap.showZone then return end
+RegisterNetEvent('gungame:notifyMapRotation')
+AddEventHandler('gungame:notifyMapRotation', function(data)
+    lib.notify({
+        title = '🔄 Changement de Map',
+        description = data.previousMap .. ' → ' .. data.newMap,
+        type = 'inform',
+        duration = 5000
+    })
     
+    if playerData.inGame then
+        SetTimeout(2000, function()
+            ExecuteCommand('leavegame')
+        end)
+    end
+end)
+
+RegisterNetEvent('gungame:clientRotationForceQuit')
+AddEventHandler('gungame:clientRotationForceQuit', function()
+    local ped = PlayerPedId()
+    local lastSpawn = playerData.lastSpawnPoint
+    
+    -- Fade out
+    DoScreenFadeOut(500)
+    while not IsScreenFadedOut() do Wait(0) end
+    
+    -- ✅ TP AMÉLIORÉ
+    if lastSpawn then
+        
+        SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
+        Wait(300)
+        ClearPedTasksImmediately(ped)
+    else
+        print("^3[GunGame Rotation]^7 Pas de position, fallback hôpital")
+        SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
+    end
+    
+    -- Nettoyer
+    RemoveAllPedWeapons(ped, true)
     removeGunGameZoneBlip()
+    RemoveAllPlayerBlips()
     
-    local mapData = Config.Maps[mapId]
-    if not mapData or not mapData.battleZone then return end
+    playerData.inGame = false
+    playerData.instanceId = nil
+    playerData.mapId = nil
+    playerData.kills = 0
+    playerData.weaponKills = 0
+    playerData.currentWeapon = nil
+    playerData.godMode = false
+    playerData.lastSpawnPoint = nil
     
-    local zone = mapData.battleZone
-    currentZoneData = {
-        x = zone.x,
-        y = zone.y,
-        z = zone.z,
-        radius = zone.radius,
-        mapName = mapData.name
-    }
+    lib.hideTextUI()
     
-    if Config.Minimap.radius.enabled then
-        radiusBlip = AddBlipForRadius(zone.x, zone.y, zone.z, zone.radius)
-        SetBlipRotation(radiusBlip, 0)
-        SetBlipColour(radiusBlip, Config.Minimap.radius.color)
-        SetBlipAlpha(radiusBlip, Config.Minimap.radius.alpha)
+    -- Fade in
+    DoScreenFadeIn(700)
+end)
+
+RegisterNetEvent('gungame:notifyMapRotation')
+AddEventHandler('gungame:notifyMapRotation', function(data)
+    lib.notify({
+        title = '🔄 Changement de Map',
+        description = data.previousMap .. ' → ' .. data.newMap,
+        type = 'inform',
+        duration = 5000
+    })
+    
+    if playerData.inGame then
+        -- Forcer le départ de la partie
+        SetTimeout(2000, function()
+            TriggerEvent('gungame:leaveGame')
+        end)
     end
-end
+end)
+
+AddEventHandler('onClientResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+
+    removeGunGameZoneBlip()
+    RemoveAllPlayerBlips()
+    
+    if playerData.inGame then
+        RemoveAllPedWeapons(PlayerPedId(), true)
+        lib.hideTextUI()
+    end
+end)
+
+AddEventHandler('playerDropped', function(reason)
+    removeGunGameZoneBlip()
+    playerData.inGame = false
+    lib.hideTextUI()
+end)
+
+
+
+
 
 -- ============================================================================
--- SUPPRESSION DU BLIP
+-- THREAD
 -- ============================================================================
 
-function removeGunGameZoneBlip()
-    if zoneBlip then
-        RemoveBlip(zoneBlip)
-        zoneBlip = nil
-    end
-    
-    if radiusBlip then
-        RemoveBlip(radiusBlip)
-        radiusBlip = nil
-    end
-    
-    currentZoneData = nil
-end
 
--- ============================================================================
+
+
+
+CreateThread(function()
+    local cfg = Config.GunGamePed
+    if not cfg.enabled then return end
+
+    -- Load ped model
+    local pedHash = GetHashKey(cfg.model)
+    RequestModel(pedHash)
+    while not HasModelLoaded(pedHash) do
+        Wait(10)
+    end
+
+    -- Spawn ped
+    local ped = CreatePed(4, pedHash, cfg.coords.x, cfg.coords.y, cfg.coords.z - 1.0, cfg.coords.w, false, true)
+
+    Wait(1000)
+
+    if cfg.frozen then FreezeEntityPosition(ped, true) end
+    if cfg.invincible then SetEntityInvincible(ped, true) end
+    if cfg.blockEvents then SetBlockingOfNonTemporaryEvents(ped, true) end
+
+    -- Interaction loop
+    while true do
+        local wait = 1000
+        local player = PlayerPedId()
+        local pCoords = GetEntityCoords(player)
+        local dist = #(pCoords - vector3(cfg.coords.x, cfg.coords.y, cfg.coords.z))
+
+        if dist < cfg.interaction.distance then
+            wait = 0
+            DrawText3D(cfg.coords.x, cfg.coords.y, cfg.coords.z + 1.0, "~y~[E]~s~ " .. (cfg.text or ""))
+
+            if IsControlJustReleased(0, 38) then -- 38 = E
+                TriggerEvent('gungame:openMenu')
+            end
+        end
+
+        Wait(wait)
+    end
+end)
+
+-- DÉTECTION DES KILLS - VERSION SIMPLIFIÉE ET FONCTIONNELLE
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(2000)
+        local currentTime = GetGameTimer()
+        
+        for victim, killTime in pairs(recentKills) do
+            if currentTime - killTime > 2000 then
+                recentKills[victim] = nil
+            end
+        end
+    end
+end)
+
+-- Détection par HasEntityBeenDamagedByWeapon
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(100)
+        
+        if playerData.inGame then
+            local playerPed = PlayerPedId()
+            local playerWeapon = GetSelectedPedWeapon(playerPed)
+            
+            -- Scanner tous les peds proches
+            local coords = GetEntityCoords(playerPed)
+            local nearbyPeds = GetGamePool('CPed')
+            
+            for _, ped in ipairs(nearbyPeds) do
+                if ped ~= playerPed and DoesEntityExist(ped) then
+                    -- Vérifier si on a tué ce ped avec notre arme
+                    if HasEntityBeenDamagedByWeapon(ped, playerWeapon, 0) then
+                        if IsEntityDead(ped) and not recentKills[ped] then
+                            local currentTime = GetGameTimer()
+                            
+                            if currentTime - lastKillTime > killCooldown then
+                                lastKillTime = currentTime
+                                recentKills[ped] = currentTime
+                                
+                                if IsPedAPlayer(ped) then
+                                    local targetPlayerId = NetworkGetPlayerIndexFromPed(ped)
+                                    if targetPlayerId ~= -1 then
+                                        local targetServerId = GetPlayerServerId(targetPlayerId)
+                                        TriggerServerEvent('gungame:registerKill', targetServerId, false)
+                                    end
+                                else
+                                    TriggerServerEvent('gungame:registerKill', nil, true)
+                                end
+                            end
+                        end
+                        
+                        -- Nettoyer le flag de dégâts
+                        ClearEntityLastDamageEntity(ped)
+                    end
+                end
+            end
+        else
+            Wait(1000)
+        end
+    end
+end)
+
+-- DÉTECTION DES MORTS
+
+Citizen.CreateThread(function()
+    local isDead = false
+    
+    while true do
+        Wait(100)
+        
+        if playerData.inGame then
+            local ped = PlayerPedId()
+            local health = GetEntityHealth(ped)
+            
+            if health <= 105 and not isDead then
+                isDead = true
+                
+                TriggerServerEvent('gungame:playerDeath')
+                
+                lib.notify({
+                    title = '💀 Mort',
+                    description = 'Vous allez respawn...',
+                    type = 'error',
+                    duration = 3000
+                })
+                
+                SetTimeout(5000, function()
+                    isDead = false
+                end)
+            end
+        else
+            isDead = false
+        end
+    end
+end)
+
+-- VÉRIFICATION ZONE
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(1000)
+        
+        if playerData.inGame then
+            local ped = PlayerPedId()
+            local coords = GetEntityCoords(ped)
+            local mapData = Config.Maps[playerData.mapId]
+            
+            if mapData then
+                local zone = mapData.battleZone
+                local distance = #(coords - vector3(zone.x, zone.y, zone.z))
+                
+                if distance > zone.radius + 50 then
+                    SetEntityCoords(ped, zone.x, zone.y, zone.z, false, false, false, false)
+                    
+                    lib.notify({
+                        title = 'Zone',
+                        description = 'Hors de la zone de combat',
+                        type = 'warning'
+                    })
+                end
+            end
+        end
+    end
+end)
+
 -- AFFICHAGE 3D (MARQUEUR ET TEXTE)
--- ============================================================================
 
 Citizen.CreateThread(function()
     while true do
@@ -1184,43 +1325,7 @@ Citizen.CreateThread(function()
     end
 end)
 
--- ============================================================================
--- FONCTION DE TEXTE 3D AMÉLIORÉE
--- ============================================================================
-
-function DrawText3DZone(x, y, z, text)
-    local onScreen, _x, _y = World3dToScreen2d(x, y, z)
-    local px, py, pz = table.unpack(GetGameplayCamCoords())
-    local dist = #(vector3(px, py, pz) - vector3(x, y, z))
-    
-    if onScreen and dist < 300 then
-        local scale = (1 / dist) * 2
-        local fov = (1 / GetGameplayCamFov()) * 100
-        scale = scale * fov * Config.Minimap.text3D.scale
-        
-        SetTextScale(0.0, scale)
-        SetTextFont(Config.Minimap.text3D.font)
-        SetTextProportional(1)
-        SetTextColour(
-            Config.Minimap.text3D.color.r,
-            Config.Minimap.text3D.color.g,
-            Config.Minimap.text3D.color.b,
-            Config.Minimap.text3D.color.a
-        )
-        SetTextDropshadow(0, 0, 0, 0, 255)
-        SetTextEdge(2, 0, 0, 0, 150)
-        SetTextDropShadow()
-        SetTextOutline()
-        SetTextEntry("STRING")
-        SetTextCentre(1)
-        AddTextComponentString(text)
-        DrawText(_x, _y)
-    end
-end
-
--- ============================================================================
 -- NOTIFICATIONS DE DISTANCE
--- ============================================================================
 
 Citizen.CreateThread(function()
     while true do
@@ -1261,9 +1366,7 @@ Citizen.CreateThread(function()
     end
 end)
 
--- ============================================================================
 -- EFFET VISUEL QUAND ON SORT DE LA ZONE
--- ============================================================================
 
 Citizen.CreateThread(function()
     while true do
@@ -1288,11 +1391,7 @@ Citizen.CreateThread(function()
     end
 end)
 
--- ============================================================================
 -- NOTIFICATION SONORE AUX LIMITES
--- ============================================================================
-
-local lastWarningSound = 0
 
 Citizen.CreateThread(function()
     while true do
@@ -1311,9 +1410,7 @@ Citizen.CreateThread(function()
     end
 end)
 
--- ============================================================================
 -- PARTICULES AUX LIMITES DE LA ZONE
--- ============================================================================
 
 Citizen.CreateThread(function()
     RequestNamedPtfxAsset("core")
@@ -1347,125 +1444,7 @@ Citizen.CreateThread(function()
     end
 end)
 
--- ============================================================================
--- CRÉER UN BLIP POUR UN JOUEUR
--- ============================================================================
-
-function CreatePlayerBlip(playerId)
-    local playerPed = GetPlayerPed(playerId)
-    if not DoesEntityExist(playerPed) then return end
-    
-    -- Supprimer l'ancien blip s'il existe
-    if playerBlips[playerId] then
-        RemoveBlip(playerBlips[playerId])
-    end
-    
-    -- Créer le nouveau blip
-    local blip = AddBlipForEntity(playerPed)
-    
-    if blip then
-        SetBlipSprite(blip, Config.PlayerBlips and Config.PlayerBlips.sprite or 1)
-        SetBlipColour(blip, Config.PlayerBlips and Config.PlayerBlips.enemyColor or 1)
-        SetBlipScale(blip, Config.PlayerBlips and Config.PlayerBlips.scale or 0.8)
-        SetBlipAsShortRange(blip, Config.PlayerBlips and Config.PlayerBlips.shortRange or true)
-        SetBlipAlpha(blip, Config.PlayerBlips and Config.PlayerBlips.alpha or 255)
-        
-        -- Afficher le nom du joueur
-        if Config.PlayerBlips and Config.PlayerBlips.showName then
-            local playerName = GetPlayerName(playerId)
-            BeginTextCommandSetBlipName("STRING")
-            AddTextComponentString(playerName)
-            EndTextCommandSetBlipName(blip)
-        end
-        
-        playerBlips[playerId] = blip
-    end
-end
-
--- ============================================================================
--- SUPPRIMER UN BLIP JOUEUR
--- ============================================================================
-
-function RemovePlayerBlip(playerId)
-    if playerBlips[playerId] then
-        RemoveBlip(playerBlips[playerId])
-        playerBlips[playerId] = nil
-    end
-end
-
--- ============================================================================
--- SUPPRIMER TOUS LES BLIPS
--- ============================================================================
-
-function RemoveAllPlayerBlips()
-    for playerId, blip in pairs(playerBlips) do
-        if DoesBlipExist(blip) then
-            RemoveBlip(blip)
-        end
-    end
-    playerBlips = {}
-end
-
--- ============================================================================
--- MISE À JOUR DES BLIPS
--- ============================================================================
-
-function UpdatePlayerBlips()
-    if not playerData.inGame then
-        RemoveAllPlayerBlips()
-        return
-    end
-    
-    -- Ne rien faire si le système de blips est désactivé
-    if Config.PlayerBlips and not Config.PlayerBlips.enabled then
-        return
-    end
-    
-    local localPlayerId = PlayerId()
-    local instance = playerData.instanceId
-    
-    -- Parcourir tous les joueurs
-    for i = 0, 255 do
-        if i ~= localPlayerId and NetworkIsPlayerActive(i) then
-            local targetPed = GetPlayerPed(i)
-            
-            if DoesEntityExist(targetPed) then
-                -- Vérifier si le joueur est dans la même instance (vous devrez adapter selon votre système)
-                -- Pour l'instant, on crée un blip pour tous les joueurs actifs
-                if not playerBlips[i] then
-                    CreatePlayerBlip(i)
-                else
-                    -- Mettre à jour le blip existant
-                    local blip = playerBlips[i]
-                    if DoesBlipExist(blip) then
-                        local playerCoords = GetEntityCoords(PlayerPedId())
-                        local targetCoords = GetEntityCoords(targetPed)
-                        local distance = #(playerCoords - targetCoords)
-                        
-                        -- Exemple: changer l'alpha selon la distance
-                        if distance < 50 then
-                            SetBlipAlpha(blip, 255)
-                        elseif distance < 100 then
-                            SetBlipAlpha(blip, 200)
-                        else
-                            SetBlipAlpha(blip, 150)
-                        end
-                    end
-                end
-            else
-                -- Supprimer le blip si le joueur n'existe plus
-                RemovePlayerBlip(i)
-            end
-        else
-            -- Supprimer le blip si le joueur n'est plus actif
-            RemovePlayerBlip(i)
-        end
-    end
-end
-
--- ============================================================================
 -- THREAD DE MISE À JOUR DES BLIPS
--- ============================================================================
 
 Citizen.CreateThread(function()
     while true do
@@ -1482,156 +1461,114 @@ Citizen.CreateThread(function()
     end
 end)
 
--- ============================================================================
--- ÉVÉNEMENT: MISE À JOUR DE LA LISTE DES JOUEURS
--- ============================================================================
 
-RegisterNetEvent('gungame:updatePlayerList')
-AddEventHandler('gungame:updatePlayerList', function(playersList)
-    if not playerData.inGame then return end
-    
-    -- Supprimer les blips des joueurs qui ne sont plus dans la liste
-    local localServerId = GetPlayerServerId(PlayerId())
-    
-    for playerId, blip in pairs(playerBlips) do
-        local playerServerId = GetPlayerServerId(playerId)
-        local stillInGame = false
-        
-        for _, serverId in ipairs(playersList) do
-            if serverId == playerServerId then
-                stillInGame = true
-                break
-            end
-        end
-        
-        if not stillInGame then
-            RemovePlayerBlip(playerId)
-        end
-    end
-    
-    -- Créer les blips pour les nouveaux joueurs
-    for _, serverId in ipairs(playersList) do
-        if serverId ~= localServerId then
-            -- Trouver le playerId depuis le serverId
-            for i = 0, 255 do
-                if NetworkIsPlayerActive(i) and GetPlayerServerId(i) == serverId then
-                    if not playerBlips[i] then
-                        CreatePlayerBlip(i)
-                    end
-                    break
-                end
-            end
-        end
-    end
-end)
+
+
 
 -- ============================================================================
--- COMMANDE DE TEST (DEBUG)
+-- COMMANDES
 -- ============================================================================
 
-if Config.Debug then
-    RegisterCommand('gg_testkill', function()
-        if playerData.inGame then
-            print("^2[GunGame Test]^7 Simulation d'un kill...")
-            TriggerServerEvent('gungame:registerKill', nil, true)
-        else
-            lib.notify({
-                title = 'Erreur',
-                description = 'Vous devez être en partie',
-                type = 'error'
-            })
-        end
-    end, false)
-    
-    RegisterCommand('gg_mykills', function()
-        if playerData.inGame then
-            local maxWeapons = #Config.Weapons
-            local killsRequired = playerData.currentWeaponIndex == maxWeapons 
-                and Config.GunGame.killsForLastWeapon 
-                or Config.GunGame.killsPerWeapon
-            
-            lib.notify({
-                title = '📊 Statistiques',
-                description = string.format(
-                    'Arme: %d/%d\nKills: %d/%d\nTotal: %d',
-                    playerData.currentWeaponIndex or 1,
-                    maxWeapons,
-                    playerData.weaponKills or 0,
-                    killsRequired,
-                    playerData.totalKills or 0
-                ),
-                type = 'inform',
-                duration = 5000
-            })
-        end
-    end, false)
-end
 
--- ============================================================================
--- ROTATION DE MAP
--- ============================================================================
 
-RegisterNetEvent('gungame:notifyMapRotation')
-AddEventHandler('gungame:notifyMapRotation', function(data)
-    lib.notify({
-        title = '🔄 Changement de Map',
-        description = data.previousMap .. ' → ' .. data.newMap,
-        type = 'inform',
-        duration = 5000
-    })
-    
+
+
+RegisterCommand('leavegame', function()
     if playerData.inGame then
-        SetTimeout(2000, function()
-            ExecuteCommand('leavegame')
-        end)
+        local ped = PlayerPedId()
+        local lastSpawn = playerData.lastSpawnPoint
+        
+        -- Fade out pour transition propre
+        DoScreenFadeOut(500)
+        while not IsScreenFadedOut() do Wait(0) end
+        
+        -- Nettoyer l'état
+        playerData.inGame = false
+        playerData.instanceId = nil
+        playerData.mapId = nil
+        playerData.kills = 0
+        playerData.weaponKills = 0
+        playerData.currentWeapon = nil
+        
+        -- Retirer armes et UI
+        RemoveAllPedWeapons(ped, true)
+        lib.hideTextUI()
+        removeGunGameZoneBlip()
+        RemoveAllPlayerBlips()
+        
+        -- ✅ NOUVEAU : TP AMÉLIORÉ avec vérification
+        if lastSpawn then
+            
+            -- TP avec tous les flags pour éviter les bugs
+            SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
+            
+            -- Attendre que le TP soit effectif
+            Wait(300)
+            
+            -- Vérifier que le TP a bien fonctionné
+            local newCoords = GetEntityCoords(ped)
+            local distance = #(vector3(lastSpawn.x, lastSpawn.y, lastSpawn.z) - newCoords)
+            
+            if distance > 5.0 then
+                print("^3[GunGame]^7 TP initial raté, nouvelle tentative...")
+                SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
+                Wait(200)
+            end
+            
+            -- S'assurer que le joueur est bien au sol
+            SetPedCoordsKeepVehicle(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z)
+            
+            -- Nettoyer les tâches pour éviter les animations bizarres
+            ClearPedTasksImmediately(ped)
+        else
+            print("^1[GunGame]^7 ERREUR: Aucune position sauvegardée!")
+            
+            -- Fallback : TP à l'hôpital
+            SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
+            Wait(200)
+        end
+        
+        -- Fade in
+        DoScreenFadeIn(700)
+        
+        -- Attendre un peu avant d'informer le serveur
+        Wait(300)
+        TriggerServerEvent('gungame:leaveGame')
+        
+        lib.notify({
+            title = 'GunGame',
+            description = 'Vous avez quitté la partie',
+            type = 'inform',
+            duration = 2000
+        })
+        
+        -- Réinitialiser la position sauvegardée
+        playerData.lastSpawnPoint = nil
+    else
+        lib.notify({
+            title = 'Erreur',
+            description = 'Vous n\'êtes pas en partie',
+            type = 'error'
+        })
     end
+end, false)
+
+Citizen.CreateThread(function()
+    Wait(1000)
+    TriggerEvent('chat:addSuggestion', '/leavegame', 'Quitter la partie GunGame', {})
 end)
 
-RegisterNetEvent('gungame:clientRotationForceQuit')
-AddEventHandler('gungame:clientRotationForceQuit', function()
-    local ped = PlayerPedId()
-    local lastSpawn = playerData.lastSpawnPoint
-    
-    -- Fade out
-    DoScreenFadeOut(500)
-    while not IsScreenFadedOut() do Wait(0) end
-    
-    -- ✅ TP AMÉLIORÉ
-    if lastSpawn then
-        print(string.format("^2[GunGame Rotation]^7 Retour position: %.2f, %.2f, %.2f", 
-            lastSpawn.x, lastSpawn.y, lastSpawn.z))
-        
-        SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
-        Wait(300)
-        ClearPedTasksImmediately(ped)
-    else
-        print("^3[GunGame Rotation]^7 Pas de position, fallback hôpital")
-        SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
-    end
-    
-    -- Nettoyer
-    RemoveAllPedWeapons(ped, true)
-    removeGunGameZoneBlip()
-    RemoveAllPlayerBlips()
-    
-    playerData.inGame = false
-    playerData.instanceId = nil
-    playerData.mapId = nil
-    playerData.kills = 0
-    playerData.weaponKills = 0
-    playerData.currentWeapon = nil
-    playerData.godMode = false
-    playerData.lastSpawnPoint = nil
-    
-    lib.hideTextUI()
-    
-    -- Fade in
-    DoScreenFadeIn(700)
-end)
+
+
+
 
 -- ============================================================================
 -- EXPORTS
 -- ============================================================================
+
+
+
+
 
 exports('isPlayerInGunGame', function()
     return playerData.inGame
@@ -1643,44 +1580,4 @@ end)
 
 exports('getGunGameMapId', function()
     return playerData.inGame and playerData.mapId or nil
-end)
-
-
--- ============================================================================
--- NETTOYAGE
--- ============================================================================
-
-RegisterNetEvent('gungame:notifyMapRotation')
-AddEventHandler('gungame:notifyMapRotation', function(data)
-    lib.notify({
-        title = '🔄 Changement de Map',
-        description = data.previousMap .. ' → ' .. data.newMap,
-        type = 'inform',
-        duration = 5000
-    })
-    
-    if playerData.inGame then
-        -- Forcer le départ de la partie
-        SetTimeout(2000, function()
-            TriggerEvent('gungame:leaveGame')
-        end)
-    end
-end)
-
-AddEventHandler('onClientResourceStop', function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then return end
-
-    removeGunGameZoneBlip()
-    RemoveAllPlayerBlips()
-    
-    if playerData.inGame then
-        RemoveAllPedWeapons(PlayerPedId(), true)
-        lib.hideTextUI()
-    end
-end)
-
-AddEventHandler('playerDropped', function(reason)
-    removeGunGameZoneBlip()
-    playerData.inGame = false
-    lib.hideTextUI()
 end)

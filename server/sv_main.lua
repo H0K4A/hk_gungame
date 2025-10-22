@@ -3,105 +3,17 @@ local ESX = exports["es_extended"]:getSharedObject()
 local playerData = {}
 local playerInventories = {}
 
--- ============================================================================
--- INITIALISATION
--- ============================================================================
 
-AddEventHandler('onServerResourceStart', function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then return end
-    
-    print("^2[GunGame Server]^7 ==========================================")
-    print("^2[GunGame Server]^7 🔧 DIAGNOSTIC DE DÉMARRAGE")
-    print("^2[GunGame Server]^7 ==========================================")
-    
-    -- Test 1: ox_lib
-    if lib then
-        print("^2[GunGame Server]^7 ✓ ox_lib est chargé")
-        
-        if lib.callback then
-            print("^2[GunGame Server]^7 ✓ lib.callback existe")
-        else
-            print("^1[GunGame Server]^7 ✗ lib.callback n'existe pas!")
-        end
-    else
-        print("^1[GunGame Server]^7 ✗ ox_lib n'est pas chargé!")
-        print("^1[GunGame Server]^7    → Ajoutez 'ensure ox_lib' AVANT votre script dans server.cfg")
-        return
-    end
-    
-    -- Test 2: ESX
-    local ESX = exports["es_extended"]:getSharedObject()
-    if ESX then
-        print("^2[GunGame Server]^7 ✓ ESX est chargé")
-    else
-        print("^1[GunGame Server]^7 ✗ ESX n'est pas chargé!")
-    end
-    
-    -- Test 3: Config
-    if Config then
-        print("^2[GunGame Server]^7 ✓ Config chargé")
-        print(string.format("^2[GunGame Server]^7    → %d maps configurées", 
-            Config.Maps and #Config.Maps or 0))
-    else
-        print("^1[GunGame Server]^7 ✗ Config non trouvé!")
-    end
-    
-    -- Test 4: Rotation
-    if Config.MapRotation and Config.MapRotation.enabled then
-        print("^2[GunGame Server]^7 ✓ Rotation activée")
-        
-        if MapRotation then
-            MapRotation.Initialize()
-            
-            local activeMaps = MapRotation.GetActiveMaps()
-            if activeMaps and #activeMaps > 0 then
-                print(string.format("^2[GunGame Server]^7 ✓ %d map(s) active(s)", #activeMaps))
-                
-                for i, mapId in ipairs(activeMaps) do
-                    local mapData = Config.Maps[mapId]
-                    print(string.format("^3[GunGame Server]^7    [%d] %s (%s)", 
-                        i, 
-                        mapData and mapData.label or "Inconnu", 
-                        mapId))
-                end
-            else
-                print("^1[GunGame Server]^7 ✗ Aucune map active après initialisation!")
-            end
-        else
-            print("^1[GunGame Server]^7 ✗ MapRotation n'existe pas!")
-        end
-    else
-        print("^3[GunGame Server]^7 ! Rotation désactivée")
-        print("^3[GunGame Server]^7    → Toutes les maps seront disponibles")
-    end
-    
-    -- Test 5: Managers
-    if InstanceManager then
-        print("^2[GunGame Server]^7 ✓ InstanceManager chargé")
-    else
-        print("^1[GunGame Server]^7 ✗ InstanceManager non chargé!")
-    end
-    
-    if SpawnSystem then
-        print("^2[GunGame Server]^7 ✓ SpawnSystem chargé")
-    else
-        print("^1[GunGame Server]^7 ✗ SpawnSystem non chargé!")
-    end
-    
-    if RoutingBucketManager then
-        print("^2[GunGame Server]^7 ✓ RoutingBucketManager chargé")
-    else
-        print("^1[GunGame Server]^7 ✗ RoutingBucketManager non chargé!")
-    end
-    
-    print("^2[GunGame Server]^7 ==========================================")
-    print("^2[GunGame Server]^7 🎮 Script prêt!")
-    print("^2[GunGame Server]^7 ==========================================")
-end)
+
+
 
 -- ============================================================================
--- ÉVÉNEMENTS JOUEUR
+-- REGISTERS EVENTS
 -- ============================================================================
+
+
+
+
 
 AddEventHandler('playerDropped', function(reason)
     local source = source
@@ -128,37 +40,8 @@ AddEventHandler('playerDropped', function(reason)
         playerInventories[source] = nil
     end
 end)
--- ============================================================================
--- COMMANDES
--- ============================================================================
 
-RegisterCommand(Config.Commands.joinGame.name, function(source, args, rawCommand)
-    TriggerClientEvent('gungame:openMenu', source)
-end, false)
-
-RegisterCommand(Config.Commands.leaveGame.name, function(source, args, rawCommand)
-    if not playerData[source] then
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = 'Erreur',
-            description = 'Vous n\'êtes dans aucune partie',
-            type = 'error'
-        })
-        return
-    end
-    
-    local instanceId = playerData[source].instanceId
-    removePlayerFromInstance(source, instanceId)
-    
-    TriggerClientEvent('ox_lib:notify', source, {
-        title = 'GunGame',
-        description = 'Vous avez quitté la partie',
-        type = 'success'
-    })
-end, false)
-
--- ============================================================================
 -- REJOINDRE UNE INSTANCE
--- ============================================================================
 
 RegisterNetEvent('gungame:joinGame')
 AddEventHandler('gungame:joinGame', function(a, b)
@@ -219,7 +102,7 @@ AddEventHandler('gungame:joinGame', function(a, b)
     exports.ox_inventory:ClearInventory(src)
     Wait(300)
     
-    -- ✅ NOUVEAU: ASSIGNER AU ROUTING BUCKET AVANT TOUT
+    -- ASSIGNER AU ROUTING BUCKET AVANT TOUT
     local bucketAssigned = RoutingBucketManager.AssignPlayerToInstance(src, instance.id)
     
     if not bucketAssigned then
@@ -255,7 +138,6 @@ AddEventHandler('gungame:joinGame', function(a, b)
     local spawn = SpawnSystem.GetSpawnForPlayer(instance.id, mapId, src)
     
     if not spawn then
-        print("^1[GunGame]^7 ERREUR: Aucun spawn disponible")
         return
     end
     
@@ -286,23 +168,13 @@ AddEventHandler('gungame:joinGame', function(a, b)
     end
 end)
 
--- ============================================================================
--- GESTION DES KILLS - VERSION ULTRA SIMPLIFIÉE ET FONCTIONNELLE
--- ============================================================================
+-- GESTION DES KILLS
 
 RegisterNetEvent('gungame:registerKill')
-AddEventHandler('gungame:registerKill', function(targetSource, isBot)
+AddEventHandler('gungame:registerKill', function(targetSource)
     local source = source
     
-    print("^2[GunGame Kill]^7 ==========================================")
-    print(string.format("^2[GunGame Kill]^7 Tueur: %d | Victime: %s | Bot: %s", 
-        source, 
-        targetSource or "N/A", 
-        isBot and "OUI" or "NON"))
-    
-    -- ========================================================================
     -- ÉTAPE 1 : VÉRIFICATIONS DE BASE
-    -- ========================================================================
     
     if not playerData[source] then
         print("^1[GunGame Kill]^7 ❌ Joueur introuvable dans playerData")
@@ -328,8 +200,8 @@ AddEventHandler('gungame:registerKill', function(targetSource, isBot)
         return
     end
     
-    -- Vérifier que la victime est dans la même instance (seulement pour les joueurs)
-    if not isBot and targetSource then
+    -- Vérifier que la victime est dans la même instance
+    if not targetSource then
         targetSource = tonumber(targetSource)
         
         if not playerData[targetSource] then
@@ -342,12 +214,8 @@ AddEventHandler('gungame:registerKill', function(targetSource, isBot)
             return
         end
     end
-    
-    print("^2[GunGame Kill]^7 ✅ Toutes les vérifications OK")
-    
-    -- ========================================================================
+
     -- ÉTAPE 2 : INCRÉMENTER LES COMPTEURS
-    -- ========================================================================
     
     local currentWeaponIndex = playerData[source].currentWeapon or 1
     local weaponKills = playerData[source].weaponKills or 0
@@ -361,143 +229,171 @@ AddEventHandler('gungame:registerKill', function(targetSource, isBot)
     playerData[source].weaponKills = weaponKills
     playerData[source].totalKills = totalKills
     
-    print(string.format("^2[GunGame Kill]^7 Nouveau compteur: %d kills (total: %d)", 
-        weaponKills, totalKills))
-    
     -- Synchroniser avec le client
     TriggerClientEvent('gungame:syncWeaponKills', source, weaponKills)
     
-    -- ========================================================================
     -- ÉTAPE 3 : CALCULER LA PROGRESSION
-    -- ========================================================================
     
     local weaponsCount = #Config.Weapons
     local killsRequired = currentWeaponIndex == weaponsCount 
         and Config.GunGame.killsForLastWeapon 
         or Config.GunGame.killsPerWeapon
     
-    print(string.format("^2[GunGame Kill]^7 Progression: %d/%d (arme %d/%d)", 
-        weaponKills, killsRequired, currentWeaponIndex, weaponsCount))
-    
-    -- ========================================================================
     -- ÉTAPE 4 : NOTIFICATIONS
-    -- ========================================================================
     
     local xPlayer = ESX.GetPlayerFromId(source)
     local killerName = xPlayer and xPlayer.getName() or "Joueur"
     
-    if isBot then
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '💀 KILL (Bot)',
-            description = string.format('%d/%d', weaponKills, killsRequired),
-            type = 'success',
-            duration = 2000
-        })
-    else
-        local xVictim = ESX.GetPlayerFromId(targetSource)
-        local victimName = xVictim and xVictim.getName() or "Joueur"
+    local xVictim = ESX.GetPlayerFromId(targetSource)
+    local victimName = xVictim and xVictim.getName() or "Joueur"
         
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '💀 KILL !',
-            description = string.format('%s (%d/%d)', victimName, weaponKills, killsRequired),
-            type = 'success',
-            duration = 3000
-        })
-        
-        -- Notifier la victime
-        TriggerClientEvent('ox_lib:notify', targetSource, {
-            title = '☠️ Éliminé',
-            description = 'Par ' .. killerName,
-            type = 'error',
-            duration = 2000
-        })
-    end
-    
-    -- ========================================================================
-    -- ÉTAPE 5 : VÉRIFIER SI ON CHANGE D'ARME
-    -- ========================================================================
-    
-    if weaponKills >= killsRequired then
-        print("^2[GunGame Kill]^7 🎯 Seuil atteint!")
-        
-        if currentWeaponIndex >= weaponsCount then
-            print("^2[GunGame Kill]^7 🏆 VICTOIRE!")
-            winnerDetected(source, instanceId)
-        else
-            local nextWeaponIndex = currentWeaponIndex + 1
-            print(string.format("^2[GunGame Kill]^7 ⬆️ Passage arme %d -> %d", 
-                currentWeaponIndex, nextWeaponIndex))
-            advancePlayerWeapon(source, instanceId, nextWeaponIndex)
-        end
-    end
-    
-    -- ========================================================================
-    -- ÉTAPE 6 : METTRE À JOUR LE LEADERBOARD
-    -- ========================================================================
-    
-    updateInstanceLeaderboard(instanceId)
-    
-    print("^2[GunGame Kill]^7 ==========================================")
-end)
-
--- ============================================================================
--- KILL DE BOT (NPC)
--- ============================================================================
-
-RegisterNetEvent('gungame:botKill')
-AddEventHandler('gungame:botKill', function()
-    local source = source
-    
-    -- Utiliser la même logique que pour les joueurs
-    -- On passe nil comme target pour indiquer que c'est un bot
-    if not playerData[source] then return end
-    
-    local instanceId = playerData[source].instanceId
-    local instance = InstanceManager.GetInstance(instanceId)
-    
-    if not instance or not instance.gameActive then return end
-    
-    -- RÉCUPÉRER LES DONNÉES ACTUELLES
-    local currentWeaponIndex = playerData[source].currentWeapon
-    local weaponKills = playerData[source].weaponKills or 0
-    local weaponsCount = #Config.Weapons
-    
-    -- INCRÉMENTER
-    weaponKills = weaponKills + 1
-    playerData[source].weaponKills = weaponKills
-    playerData[source].totalKills = (playerData[source].totalKills or 0) + 1
-    
-    -- SYNCHRONISER AVEC LE CLIENT
-    TriggerClientEvent('gungame:syncWeaponKills', source, weaponKills)
-    
-    -- Déterminer kills requis
-    local killsRequired
-    if currentWeaponIndex == weaponsCount then
-        killsRequired = Config.GunGame.killsForLastWeapon
-    else
-        killsRequired = Config.GunGame.killsPerWeapon
-    end
-    
     TriggerClientEvent('ox_lib:notify', source, {
-        title = '💀 KILL (Bot)',
-        description = string.format('%d/%d', weaponKills, killsRequired),
+        title = '💀 KILL !',
+        description = string.format('%s (%d/%d)', victimName, weaponKills, killsRequired),
         type = 'success',
+        duration = 3000
+    })
+        
+    -- Notifier la victime
+    TriggerClientEvent('ox_lib:notify', targetSource, {
+        title = '☠️ Éliminé',
+        description = 'Par ' .. killerName,
+        type = 'error',
         duration = 2000
     })
     
-    -- Vérifier progression
+    -- ÉTAPE 5 : VÉRIFIER SI ON CHANGE D'ARME
+    
     if weaponKills >= killsRequired then
+        
         if currentWeaponIndex >= weaponsCount then
             winnerDetected(source, instanceId)
         else
-            advancePlayerWeapon(source, instanceId, currentWeaponIndex + 1)
+            local nextWeaponIndex = currentWeaponIndex + 1
         end
+    end
+    
+    -- ÉTAPE 6 : METTRE À JOUR LE LEADERBOARD
+    
+    updateInstanceLeaderboard(instanceId)
+end)
+
+-- GESTION DES MORTS
+
+RegisterNetEvent('gungame:playerDeath')
+AddEventHandler('gungame:playerDeath', function()
+    local source = source
+    
+    if not playerData[source] then return end
+    
+    local instanceId = playerData[source].instanceId
+    if not instanceId then return end
+    
+    local instance = InstanceManager.GetInstance(instanceId)
+    if not instance or not instance.gameActive then return end
+    
+    SpawnSystem.FreeSpawn(instanceId, source)
+    
+    SetTimeout(Config.GunGame.respawnDelay, function()
+        if playerData[source] and playerData[source].instanceId == instanceId then
+            respawnPlayerInInstance(source, instanceId)
+        end
+    end)
+end)
+
+
+-- RETIRER UN JOUEUR DE L'INSTANCE
+
+RegisterNetEvent('gungame:leaveGame')
+AddEventHandler('gungame:leaveGame', function()
+    local source = source
+    if not playerData[source] then return end
+    
+    local instanceId = playerData[source].instanceId
+    removePlayerFromInstance(source, instanceId)
+end)
+
+-- ÉVÉNEMENTS DIVERS
+
+RegisterNetEvent('gungame:playerEnteredInstance')
+AddEventHandler('gungame:playerEnteredInstance', function(instanceId, mapId)
+    local source = source
+    
+    if not source or source == 0 then
+        print("^1[GunGame]^7 ERREUR: source invalide dans playerEnteredInstance")
+        return
+    end
+    
+    if not instanceId then
+        print("^1[GunGame]^7 ERREUR: instanceId nil dans playerEnteredInstance")
+        return
+    end
+    
+    if not mapId then
+        print("^1[GunGame]^7 ERREUR: mapId nil dans playerEnteredInstance")
+        return
+    end
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Joueur %d entré dans instance %d (Map: %s)", 
+            source, instanceId, tostring(mapId)))
     end
 end)
 
+-- ÉVÉNEMENT: ROTATION FORCÉE
+
+RegisterNetEvent('gungame:rotationForcedQuit')
+AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
+    local source = targetSource or source
+    
+    if not playerData[source] then return end
+    
+    local instanceId = playerData[source].instanceId
+    local data = playerData[source]
+    
+    if data and instanceId then
+        SpawnSystem.FreeSpawn(instanceId, source)
+        
+        -- ✅ NOUVEAU: REMETTRE DANS LE MONDE NORMAL
+        RoutingBucketManager.ReturnPlayerToWorld(source)
+        
+        if playerInventories[source] then
+            SetTimeout(500, function()
+                restorePlayerInventory(source, playerInventories[source])
+                playerInventories[source] = nil
+            end)
+        end
+        
+        TriggerClientEvent('ox_lib:notify', source, {
+            title = '🔄 Changement de Map',
+            description = 'La map va changer, retour au lobby',
+            type = 'warning',
+            duration = 4000
+        })
+        
+        TriggerClientEvent('gungame:clientRotationForceQuit', source)
+        
+        SetTimeout(1000, function()
+            if playerData[source] then
+                removePlayerFromInstance(source, instanceId)
+            end
+        end)
+    end
+end)
+
+
+
+
+
 -- ============================================================================
+-- FONCTIONS
+-- ============================================================================
+
+
+
+
+
 -- AVANCER À L'ARME SUIVANTE - VERSION SIMPLIFIÉE
--- ============================================================================
 
 function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     if not playerData[source] or not InstanceManager.GetInstance(instanceId) then
@@ -577,36 +473,8 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     
     updateInstanceLeaderboard(instanceId)
 end
-        
 
--- ============================================================================
--- GESTION DES MORTS
--- ============================================================================
-
-RegisterNetEvent('gungame:playerDeath')
-AddEventHandler('gungame:playerDeath', function()
-    local source = source
-    
-    if not playerData[source] then return end
-    
-    local instanceId = playerData[source].instanceId
-    if not instanceId then return end
-    
-    local instance = InstanceManager.GetInstance(instanceId)
-    if not instance or not instance.gameActive then return end
-    
-    SpawnSystem.FreeSpawn(instanceId, source)
-    
-    SetTimeout(Config.GunGame.respawnDelay, function()
-        if playerData[source] and playerData[source].instanceId == instanceId then
-            respawnPlayerInInstance(source, instanceId)
-        end
-    end)
-end)
-
--- ============================================================================
 -- RESPAWN DU JOUEUR
--- ============================================================================
 
 function respawnPlayerInInstance(source, instanceId)
     local instance = InstanceManager.GetInstance(instanceId)
@@ -634,9 +502,7 @@ function respawnPlayerInInstance(source, instanceId)
     updateInstanceLeaderboard(instanceId)
 end
 
--- ============================================================================
 -- GAGNANT
--- ============================================================================
 
 function winnerDetected(source, instanceId)
     local instance = InstanceManager.GetInstance(instanceId)
@@ -679,10 +545,7 @@ function winnerDetected(source, instanceId)
     end
 end
 
-
--- ============================================================================
 -- DONNER UNE ARME
--- ============================================================================
 
 function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     if not source or not tonumber(source) then
@@ -704,15 +567,17 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     local ammo = Config.WeaponAmmo[weapon] or 500
     local weaponName = weapon:lower()
     
+    -- Retirer l'arme si elle existe déjà
     local hasWeapon = exports.ox_inventory:GetItem(source, weaponName, nil, false)
     if hasWeapon and hasWeapon.count > 0 then
         exports.ox_inventory:RemoveItem(source, weaponName, hasWeapon.count)
         Wait(200)
     end
     
+    -- Donner l'arme avec durabilité 100 (max)
     local success = exports.ox_inventory:AddItem(source, weaponName, 1, {
         ammo = ammo,
-        durability = 100
+        durability = 100  -- Durabilité au maximum
     })
     
     if success then
@@ -735,19 +600,6 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
         end)
     end
 end
-
--- ============================================================================
--- RETIRER UN JOUEUR DE L'INSTANCE
--- ============================================================================
-
-RegisterNetEvent('gungame:leaveGame')
-AddEventHandler('gungame:leaveGame', function()
-    local source = source
-    if not playerData[source] then return end
-    
-    local instanceId = playerData[source].instanceId
-    removePlayerFromInstance(source, instanceId)
-end)
 
 function removePlayerFromInstance(source, instanceId)
     if not source or not tonumber(source) then
@@ -805,9 +657,7 @@ function removePlayerFromInstance(source, instanceId)
     end
 end
 
--- ============================================================================
 -- RÉINITIALISER UNE INSTANCE
--- ============================================================================
 
 function resetInstance(instanceId)
     local instance = InstanceManager.GetInstance(instanceId)
@@ -821,9 +671,7 @@ function resetInstance(instanceId)
     SpawnSystem.ResetInstance(instanceId)
 end
 
--- ============================================================================
 -- GESTION DE L'INVENTAIRE
--- ============================================================================
 
 function savePlayerInventory(source)
     local allItems = exports.ox_inventory:GetInventoryItems(source)
@@ -866,9 +714,7 @@ function restorePlayerInventory(source, inventory)
     end)
 end
 
--- ============================================================================
 -- MISE À JOUR DE LA LISTE DES JOUEURS
--- ============================================================================
 
 function updateInstancePlayerList(instanceId)
     if not instanceId then
@@ -954,90 +800,6 @@ function updateInstanceLeaderboard(instanceId)
     end
 end
 
-Citizen.CreateThread(function()
-    while true do
-        Wait(2000) -- Mise à jour toutes les 2 secondes
-        
-        for _, instance in pairs(InstanceManager.GetActiveInstances()) do
-            if instance and instance.gameActive and instance.players and #instance.players > 0 then
-                updateInstanceLeaderboard(instance.id)
-            end
-        end
-    end
-end)
-
--- ============================================================================
--- ÉVÉNEMENTS DIVERS
--- ============================================================================
-
-RegisterNetEvent('gungame:playerEnteredInstance')
-AddEventHandler('gungame:playerEnteredInstance', function(instanceId, mapId)
-    local source = source
-    
-    if not source or source == 0 then
-        print("^1[GunGame]^7 ERREUR: source invalide dans playerEnteredInstance")
-        return
-    end
-    
-    if not instanceId then
-        print("^1[GunGame]^7 ERREUR: instanceId nil dans playerEnteredInstance")
-        return
-    end
-    
-    if not mapId then
-        print("^1[GunGame]^7 ERREUR: mapId nil dans playerEnteredInstance")
-        return
-    end
-    
-    if Config.Debug then
-        print(string.format("^2[GunGame]^7 Joueur %d entré dans instance %d (Map: %s)", 
-            source, instanceId, tostring(mapId)))
-    end
-end)
-
--- ============================================================================
--- ÉVÉNEMENT: ROTATION FORCÉE
--- ============================================================================
-
-RegisterNetEvent('gungame:rotationForcedQuit')
-AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
-    local source = targetSource or source
-    
-    if not playerData[source] then return end
-    
-    local instanceId = playerData[source].instanceId
-    local data = playerData[source]
-    
-    if data and instanceId then
-        SpawnSystem.FreeSpawn(instanceId, source)
-        
-        -- ✅ NOUVEAU: REMETTRE DANS LE MONDE NORMAL
-        RoutingBucketManager.ReturnPlayerToWorld(source)
-        
-        if playerInventories[source] then
-            SetTimeout(500, function()
-                restorePlayerInventory(source, playerInventories[source])
-                playerInventories[source] = nil
-            end)
-        end
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🔄 Changement de Map',
-            description = 'La map va changer, retour au lobby',
-            type = 'warning',
-            duration = 4000
-        })
-        
-        TriggerClientEvent('gungame:clientRotationForceQuit', source)
-        
-        SetTimeout(1000, function()
-            if playerData[source] then
-                removePlayerFromInstance(source, instanceId)
-            end
-        end)
-    end
-end)
-
 function ArePlayersInSameInstance(source1, source2)
     if not playerData[source1] or not playerData[source2] then
         return false
@@ -1053,9 +815,93 @@ function ArePlayersInSameInstance(source1, source2)
     return instance1 == instance2 and RoutingBucketManager.ArePlayersInSameBucket(source1, source2)
 end
 
+
+
+
+
 -- ============================================================================
--- COMMANDE ADMIN POUR FORCER LA ROTATION
+-- THREADS
 -- ============================================================================
+
+
+
+
+
+-- MAINTIEN DE LA DURABILITÉ INFINIE
+
+-- Thread qui vérifie et répare la durabilité toutes les 2 secondes
+Citizen.CreateThread(function()
+    while true do
+        Wait(2000) -- Vérification toutes les 2 secondes
+        
+        for source, data in pairs(playerData) do
+            if data.inGame and data.currentWeapon then
+                local weaponName = Config.Weapons[data.currentWeapon]
+                
+                if weaponName then
+                    local weaponItem = exports.ox_inventory:GetItem(source, weaponName:lower(), nil, false)
+                    
+                    -- Si l'arme existe et que sa durabilité est inférieure à 100
+                    if weaponItem and weaponItem.metadata and weaponItem.metadata.durability then
+                        if weaponItem.metadata.durability < 100 then
+                            -- Réparer la durabilité
+                            exports.ox_inventory:SetDurability(source, weaponItem.slot, 100)
+                            
+                            if Config.Debug then
+                                print(string.format("^3[GunGame]^7 Durabilité réparée: %s -> 100%% (Joueur %d)", 
+                                    weaponName, source))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(2000) -- Mise à jour toutes les 2 secondes
+        
+        for _, instance in pairs(InstanceManager.GetActiveInstances()) do
+            if instance and instance.gameActive and instance.players and #instance.players > 0 then
+                updateInstanceLeaderboard(instance.id)
+            end
+        end
+    end
+end)
+
+
+
+
+
+-- ============================================================================
+-- COMMANDES
+-- ============================================================================
+
+
+
+
+
+RegisterCommand(Config.Commands.leaveGame.name, function(source, args, rawCommand)
+    if not playerData[source] then
+        TriggerClientEvent('ox_lib:notify', source, {
+            title = 'Erreur',
+            description = 'Vous n\'êtes dans aucune partie',
+            type = 'error'
+        })
+        return
+    end
+    
+    local instanceId = playerData[source].instanceId
+    removePlayerFromInstance(source, instanceId)
+    
+    TriggerClientEvent('ox_lib:notify', source, {
+        title = 'GunGame',
+        description = 'Vous avez quitté la partie',
+        type = 'success'
+    })
+end, false)
 
 RegisterCommand('gg_rotate', function(source, args, rawCommand)
     if source == 0 then -- Console uniquement
@@ -1079,38 +925,30 @@ RegisterCommand('gg_rotate', function(source, args, rawCommand)
     end
 end, true)
 
+
+
+
+
 -- ============================================================================
 -- CALLBACKS
 -- ============================================================================
 
+
+
+
+
 if lib and lib.callback then
-    print("^2[GunGame Server]^7 Enregistrement des callbacks...")
     
     lib.callback.register('gungame:getAvailableGames', function(source)
-        print(string.format("^2[GunGame Server]^7 Callback getAvailableGames appelé par joueur %d", source))
         
         local games = {}
         
         if Config.MapRotation and Config.MapRotation.enabled and MapRotation then
-            print("^2[GunGame Server]^7 Rotation activée, récupération des maps actives...")
             
             games = MapRotation.GetAvailableGames()
             
             if not games then
-                print("^1[GunGame Server]^7 ERREUR: GetAvailableGames() a retourné nil!")
                 games = {}
-            end
-            
-            print(string.format("^2[GunGame Server]^7 Rotation activée, %d partie(s) disponible(s)", #games))
-            
-            -- Debug détaillé
-            for i, game in ipairs(games) do
-                print(string.format("^3[GunGame Server]^7   [%d] %s (%s) - %d/%d joueurs", 
-                    i, 
-                    game.label or "???", 
-                    game.mapId or "???",
-                    game.currentPlayers or 0, 
-                    game.maxPlayers or 0))
             end
         else
             print("^3[GunGame Server]^7 Rotation désactivée, affichage de toutes les maps")
@@ -1118,7 +956,6 @@ if lib and lib.callback then
             local count = 0
             for mapId, mapData in pairs(Config.Maps) do
                 count = count + 1
-                print(string.format("^3[GunGame Server]^7 Traitement map %d: %s", count, mapId))
                 
                 local instance = InstanceManager.FindOrCreateInstance(mapId)
                 
@@ -1132,21 +969,11 @@ if lib and lib.callback then
                     }
                     
                     table.insert(games, gameData)
-                    
-                    print(string.format("^2[GunGame Server]^7   ✓ Map: %s (%d/%d joueurs)", 
-                        gameData.label, 
-                        gameData.currentPlayers, 
-                        gameData.maxPlayers))
-                else
-                    print(string.format("^1[GunGame Server]^7   ✗ Impossible de créer instance pour %s", mapId))
                 end
             end
-            
-            print(string.format("^2[GunGame Server]^7 Total: %d maps ajoutées", #games))
         end
         
         if not games or #games == 0 then
-            print("^1[GunGame Server]^7 ATTENTION: Aucune partie disponible à retourner!")
             
             -- Créer une entrée de fallback pour le debug
             games = {{
@@ -1158,672 +985,16 @@ if lib and lib.callback then
             }}
         end
         
-        print(string.format("^2[GunGame Server]^7 Retour de %d partie(s) au joueur %d", #games, source))
-        
         return games
     end)
     
     lib.callback.register('gungame:getRotationInfo', function(source)
-        print(string.format("^2[GunGame Server]^7 Callback getRotationInfo appelé par joueur %d", source))
         
         if Config.MapRotation and Config.MapRotation.enabled and MapRotation then
             local info = MapRotation.GetRotationInfo()
-            print(string.format("^2[GunGame Server]^7 Retour info rotation au joueur %d", source))
             return info
         end
-        
-        print("^3[GunGame Server]^7 Rotation désactivée, retour nil")
         return nil
-    end)
-    
-    print("^2[GunGame Server]^7 ✓ Callbacks enregistrés avec succès!")
-else
-    print("^1[GunGame Server]^7 ✗ ERREUR CRITIQUE: ox_lib n'est pas disponible!")
-    print("^1[GunGame Server]^7    Vérifiez que ox_lib est bien démarré AVANT gungame")
-end
-
--- ============================================================================
--- COMMANDES DEBUG
--- ============================================================================
-
-if Config.Debug then
-    RegisterCommand('gg_stats', function(source, args, rawCommand)
-        if source == 0 then
-            print("^2[GunGame]^7 ===== STATISTIQUES DES INSTANCES =====")
-            
-            for _, instance in pairs(InstanceManager.GetAllInstances()) do
-                print(string.format("^3Instance %d^7: Map=%s, Joueurs=%d/%d, Active=%s", 
-                    instance.id, 
-                    instance.map, 
-                    instance.currentPlayers, 
-                    Config.InstanceSystem.maxPlayersPerInstance,
-                    instance.gameActive and "OUI" or "NON"
-                ))
-            end
-            
-            print("^2[GunGame]^7 =====================================")
-        end
-    end, true)
-    
-    RegisterCommand('gg_resetinstance', function(source, args, rawCommand)
-        if source == 0 then
-            local instanceId = tonumber(args[1])
-            local instance = InstanceManager.GetInstance(instanceId)
-            
-            if instance then
-                resetInstance(instanceId)
-                print("^2[GunGame]^7 Instance " .. instanceId .. " réinitialisée")
-            else
-                print("^1[GunGame]^7 Instance invalide")
-            end
-        end
-    end, true)
-    
-    -- NOUVELLE COMMANDE: Afficher les kills d'un joueur
-    RegisterCommand('gg_checkkills', function(source, args, rawCommand)
-        if source == 0 then
-            local targetId = tonumber(args[1])
-            
-            if not targetId then
-                print("^3[GunGame Debug]^7 Usage: gg_checkkills <playerId>")
-                return
-            end
-            
-            if playerData[targetId] then
-                local data = playerData[targetId]
-                print("^2[GunGame Debug]^7 ==========================================")
-                print(string.format("^2[GunGame Debug]^7 Joueur: %s (ID: %d)", data.playerName or "Inconnu", targetId))
-                print(string.format("^2[GunGame Debug]^7 Instance: %d", data.instanceId or 0))
-                print(string.format("^2[GunGame Debug]^7 Arme actuelle: %d/%d", data.currentWeapon or 0, #Config.Weapons))
-                print(string.format("^2[GunGame Debug]^7 Kills arme actuelle: %d", data.weaponKills or 0))
-                print(string.format("^2[GunGame Debug]^7 Kills totaux: %d", data.totalKills or 0))
-                print("^2[GunGame Debug]^7 ==========================================")
-            else
-                print("^1[GunGame Debug]^7 Joueur non trouvé ou pas en jeu")
-            end
-        end
-    end, true)
-
-    RegisterCommand('gg_forcekill', function(source, args, rawCommand)
-    if source == 0 then return end
-    
-        if not playerData[source] then
-            print("^1[GunGame]^7 Joueur pas en jeu")
-            return
-        end
-    
-        print("^2[GunGame Test]^7 Simulation d'un kill pour le joueur " .. source)
-        TriggerEvent('gungame:botKill', source)
-
-    end, false)
-
-    RegisterCommand('gg_mydata', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        if playerData[source] then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {
-                    "GunGame Debug",
-                    string.format("Arme: %d/%d | Kills: %d | Total: %d",
-                        playerData[source].currentWeapon or 0,
-                        #Config.Weapons,
-                        playerData[source].weaponKills or 0,
-                        playerData[source].totalKills or 0)
-                }
-            })
-        else
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Debug", "Vous n'êtes pas en jeu"}
-            })
-        end
-    end, false)
-
-    RegisterCommand('gg_givekill', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        if not playerData[source] then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame", "Vous n'êtes pas en partie"}
-            })
-            return
-        end
-        
-        print("^2[GunGame Debug]^7 Kill manuel donné au joueur " .. source)
-        TriggerEvent('gungame:registerKill', source, nil, true)
-    end, false)
-    
-    RegisterCommand('gg_resetkills', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        if not playerData[source] then return end
-        
-        playerData[source].weaponKills = 0
-        playerData[source].totalKills = 0
-        
-        TriggerClientEvent('gungame:syncWeaponKills', source, 0)
-        
-        TriggerClientEvent('chat:addMessage', source, {
-            args = {"GunGame", "Kills réinitialisés"}
-        })
-    end, false)
-
-    -- ========================================================================
-    -- /gg_start [targetId] [mapId] - TP un joueur avec toi dans une partie
-    -- ========================================================================
-    
-    RegisterCommand('gg_start', function(source, args)
-        if source == 0 then
-            print("^1[GunGame Dev]^7 Cette commande doit être utilisée en jeu")
-            return
-        end
-
-        local targetId = tonumber(args[1])
-        local mapId = args[2]
-        local xTarget = ESX.GetPlayerFromId(targetId)
-        local xPlayer = ESX.GetPlayerFromId(source)
-
-        if not targetId or not xTarget then
-            TriggerClientEvent('ox_lib:notify', source, {
-                title = 'GunGame Dev',
-                description = 'Usage: /gg_start [ID] [mapId]',
-                type = 'error'
-            })
-            return
-        end
-
-        -- si pas de map, on prend la première
-        if not mapId then
-            for id, _ in pairs(Config.Maps) do
-                mapId = id
-                break
-            end
-        end
-
-        -- vérifier la map
-        if not Config.Maps[mapId] then
-            TriggerClientEvent('ox_lib:notify', source, {
-                title = 'GunGame Dev',
-                description = 'Map invalide',
-                type = 'error'
-            })
-            return
-        end
-
-        print(string.format("^2[GunGame Dev]^7 %s lance une partie avec %s sur %s",
-            xPlayer.getName(), xTarget.getName(), mapId))
-
-        -- 💥 LA DIFFÉRENCE QUI FAIT TOUT : on force le join correctement
-        TriggerEvent('gungame:joinGame', source, mapId)     -- pour le joueur qui fait la commande
-        Wait(500)
-        TriggerEvent('gungame:joinGame', targetId, mapId)
-
-        -- Notifs
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = 'GunGame',
-            description = 'Partie lancée avec ' .. xTarget.getName(),
-            type = 'success'
-        })
-
-        TriggerClientEvent('ox_lib:notify', targetId, {
-            title = 'GunGame',
-            description = xPlayer.getName() .. ' t\'a téléporté en GunGame',
-            type = 'inform'
-        })
-    end)
-    
-    -- ========================================================================
-    -- /gg_tp [targetId] - TP vers un joueur en partie
-    -- ========================================================================
-    
-    RegisterCommand('gg_tp', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        local targetId = tonumber(args[1])
-        
-        if not targetId then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "Usage: /gg_tp [ID du joueur]"}
-            })
-            return
-        end
-        
-        if not playerData[targetId] or not playerData[targetId].inGame then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "^1Ce joueur n'est pas en partie"}
-            })
-            return
-        end
-        
-        local instanceId = playerData[targetId].instanceId
-        local instance = InstanceManager.GetInstance(instanceId)
-        
-        if not instance then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "^1Instance introuvable"}
-            })
-            return
-        end
-        
-        local mapId = instance.map
-        
-        -- Faire rejoindre la même instance
-        TriggerEvent('gungame:joinGame', source, mapId)
-        
-        local xTarget = ESX.GetPlayerFromId(targetId)
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🎮 Dev TP',
-            description = 'Téléporté vers ' .. xTarget.getName(),
-            type = 'success',
-            duration = 3000
-        })
-    end, false)
-    
-    -- ========================================================================
-    -- /gg_summon [targetId] - TP un joueur vers toi (si tu es en partie)
-    -- ========================================================================
-    
-    RegisterCommand('gg_summon', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        local targetId = tonumber(args[1])
-        
-        if not targetId then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "Usage: /gg_summon [ID du joueur]"}
-            })
-            return
-        end
-        
-        if not playerData[source] or not playerData[source].inGame then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "^1Vous devez être en partie"}
-            })
-            return
-        end
-        
-        local xTarget = ESX.GetPlayerFromId(targetId)
-        if not xTarget then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "^1Joueur introuvable"}
-            })
-            return
-        end
-        
-        local instanceId = playerData[source].instanceId
-        local instance = InstanceManager.GetInstance(instanceId)
-        local mapId = instance.map
-        
-        -- Faire rejoindre le joueur
-        TriggerEvent('gungame:joinGame', targetId, mapId)
-        
-        local xPlayer = ESX.GetPlayerFromId(source)
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🎮 Dev Summon',
-            description = xTarget.getName() .. ' a été invoqué',
-            type = 'success',
-            duration = 3000
-        })
-        
-        TriggerClientEvent('ox_lib:notify', targetId, {
-            title = '🎮 Dev Summon',
-            description = xPlayer.getName() .. ' vous a invoqué',
-            type = 'inform',
-            duration = 5000
-        })
-    end, false)
-    
-    -- ========================================================================
-    -- /gg_boost [targetId] [weaponIndex] - Change l'arme d'un joueur
-    -- ========================================================================
-    
-    RegisterCommand('gg_boost', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        local targetId = tonumber(args[1]) or source
-        local weaponIndex = tonumber(args[2])
-        
-        if not weaponIndex then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "Usage: /gg_boost [ID optionnel] [index d'arme]"}
-            })
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"", "Armes: 1 à " .. #Config.Weapons}
-            })
-            return
-        end
-        
-        if weaponIndex < 1 or weaponIndex > #Config.Weapons then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "^1Index d'arme invalide (1-" .. #Config.Weapons .. ")"}
-            })
-            return
-        end
-        
-        if not playerData[targetId] or not playerData[targetId].inGame then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "^1Ce joueur n'est pas en partie"}
-            })
-            return
-        end
-        
-        local instanceId = playerData[targetId].instanceId
-        
-        advancePlayerWeapon(targetId, instanceId, weaponIndex)
-        
-        local xTarget = ESX.GetPlayerFromId(targetId)
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🎮 Dev Boost',
-            description = string.format('%s -> Arme %d/%d', 
-                xTarget.getName(), weaponIndex, #Config.Weapons),
-            type = 'success',
-            duration = 3000
-        })
-    end, false)
-    
-    -- ========================================================================
-    -- /gg_listonline - Liste les joueurs en ligne avec leur ID
-    -- ========================================================================
-    
-    RegisterCommand('gg_listonline', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        TriggerClientEvent('chat:addMessage', source, {
-            args = {"GunGame Dev", "^2=== JOUEURS EN LIGNE ==="}
-        })
-        
-        local players = ESX.GetExtendedPlayers()
-        
-        for _, xPlayer in ipairs(players) do
-            local inGame = playerData[xPlayer.source] and playerData[xPlayer.source].inGame or false
-            local status = inGame and "^2[EN PARTIE]" or "^7[LOBBY]"
-            
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"", string.format("%s ID: ^3%d^7 - %s", 
-                    status, xPlayer.source, xPlayer.getName())}
-            })
-        end
-        
-        TriggerClientEvent('chat:addMessage', source, {
-            args = {"", "^2========================"}
-        })
-    end, false)
-    
-    -- ========================================================================
-    -- /gg_kickall - Kick tous les joueurs des parties
-    -- ========================================================================
-    
-    RegisterCommand('gg_kickall', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        local count = 0
-        
-        for playerId, data in pairs(playerData) do
-            if data.inGame and data.instanceId then
-                removePlayerFromInstance(playerId, data.instanceId)
-                count = count + 1
-            end
-        end
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🎮 Dev Admin',
-            description = count .. ' joueur(s) expulsé(s)',
-            type = 'success',
-            duration = 3000
-        })
-    end, false)
-    
-    -- ========================================================================
-    -- /gg_win [targetId] - Fait gagner un joueur instantanément
-    -- ========================================================================
-    
-    RegisterCommand('gg_win', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        local targetId = tonumber(args[1]) or source
-        
-        if not playerData[targetId] or not playerData[targetId].inGame then
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Dev", "^1Ce joueur n'est pas en partie"}
-            })
-            return
-        end
-        
-        local instanceId = playerData[targetId].instanceId
-        
-        winnerDetected(targetId, instanceId)
-        
-        local xTarget = ESX.GetPlayerFromId(targetId)
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🎮 Dev Win',
-            description = xTarget.getName() .. ' a gagné',
-            type = 'success',
-            duration = 3000
-        })
-    end, false)
-    
-    -- ========================================================================
-    -- /gg_maps - Liste toutes les maps disponibles
-    -- ========================================================================
-    
-    RegisterCommand('gg_maps', function(source, args, rawCommand)
-        if source == 0 then return end
-        
-        TriggerClientEvent('chat:addMessage', source, {
-            args = {"GunGame Dev", "^2=== MAPS DISPONIBLES ==="}
-        })
-        
-        if Config.MapRotation and Config.MapRotation.enabled then
-            local activeMaps = MapRotation.GetActiveMaps()
-            
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"", "^2Maps actives:"}
-            })
-            
-            for _, mapId in ipairs(activeMaps) do
-                local mapData = Config.Maps[mapId]
-                local instance = InstanceManager.FindOrCreateInstance(mapId)
-                local players = instance and instance.currentPlayers or 0
-                
-                TriggerClientEvent('chat:addMessage', source, {
-                    args = {"", string.format("  ^3%s^7 - %s (%d joueurs)", 
-                        mapId, mapData.label, players)}
-                })
-            end
-            
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"", "^7Autres maps:"}
-            })
-            
-            for mapId, mapData in pairs(Config.Maps) do
-                local isActive = false
-                for _, activeId in ipairs(activeMaps) do
-                    if activeId == mapId then
-                        isActive = true
-                        break
-                    end
-                end
-                
-                if not isActive then
-                    TriggerClientEvent('chat:addMessage', source, {
-                        args = {"", string.format("  ^8%s^7 - %s (inactive)", 
-                            mapId, mapData.label)}
-                    })
-                end
-            end
-        else
-            for mapId, mapData in pairs(Config.Maps) do
-                local instance = InstanceManager.FindOrCreateInstance(mapId)
-                local players = instance and instance.currentPlayers or 0
-                
-                TriggerClientEvent('chat:addMessage', source, {
-                    args = {"", string.format("  ^3%s^7 - %s (%d joueurs)", 
-                        mapId, mapData.label, players)}
-                })
-            end
-        end
-        
-        TriggerClientEvent('chat:addMessage', source, {
-            args = {"", "^2========================="}
-        })
-    end, false)
-    
-    -- ========================================================================
-    -- SUGGESTIONS DE COMMANDES
-    -- ========================================================================
-    
-    Citizen.CreateThread(function()
-        Wait(2000)
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_start', 
-            'Lance une partie avec un joueur', {
-            { name = "ID", help = "ID du joueur" },
-            { name = "Map", help = "ID de la map (optionnel)" }
-        })
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_tp', 
-            'TP vers un joueur en partie', {
-            { name = "ID", help = "ID du joueur" }
-        })
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_summon', 
-            'Invoque un joueur dans ta partie', {
-            { name = "ID", help = "ID du joueur" }
-        })
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_boost', 
-            'Change l\'arme d\'un joueur', {
-            { name = "ID", help = "ID du joueur (optionnel)" },
-            { name = "Arme", help = "Index d'arme (1-" .. #Config.Weapons .. ")" }
-        })
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_listonline', 
-            'Liste les joueurs en ligne')
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_kickall', 
-            'Expulse tous les joueurs des parties')
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_win', 
-            'Fait gagner un joueur', {
-            { name = "ID", help = "ID du joueur (optionnel)" }
-        })
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_maps', 
-            'Liste toutes les maps')
-        
-        print("^2[GunGame Dev]^7 Commandes de développement chargées")
-    end)
-
-    RegisterCommand('gg_checkbucket', function(source, args)
-        if source == 0 then return end
-        
-        local bucket = RoutingBucketManager.GetPlayerBucket(source)
-        local instanceId = playerData[source] and playerData[source].instanceId
-        
-        TriggerClientEvent('chat:addMessage', source, {
-            args = {
-                "GunGame Debug",
-                string.format("^2Votre bucket: %d | Instance: %s", 
-                    bucket, 
-                    instanceId and tostring(instanceId) or "Aucune")
-            }
-        })
-        
-        if instanceId then
-            local instance = InstanceManager.GetInstance(instanceId)
-            if instance then
-                local instanceBucket = RoutingBucketManager.GetInstanceBucket(instanceId)
-                TriggerClientEvent('chat:addMessage', source, {
-                    args = {
-                        "",
-                        string.format("^3Instance %d: Bucket %d | Joueurs: %d/%d", 
-                            instanceId, 
-                            instanceBucket or 0,
-                            instance.currentPlayers or 0,
-                            instance.maxPlayers or 0)
-                    }
-                })
-            end
-        end
-    end, false)
-    
-    RegisterCommand('gg_buckets', function(source, args)
-        if source == 0 then
-            print("^2[GunGame Debug]^7 ===== ROUTING BUCKETS =====")
-            
-            -- Liste des instances et leurs buckets
-            for instanceId, instance in pairs(InstanceManager.GetAllInstances()) do
-                local bucketId = RoutingBucketManager.GetInstanceBucket(instanceId)
-                print(string.format("^3Instance %d^7: Map=%s, Bucket=%d, Joueurs=%d", 
-                    instanceId, 
-                    instance.map, 
-                    bucketId or 0,
-                    instance.currentPlayers or 0))
-            end
-            
-            print("^2[GunGame Debug]^7 ============================")
-        else
-            TriggerClientEvent('chat:addMessage', source, {
-                args = {"GunGame Debug", "^1Cette commande est réservée à la console"}
-            })
-        end
-    end, false)
-    
-    RegisterCommand('gg_resetbucket', function(source, args)
-        if source == 0 then return end
-        
-        RoutingBucketManager.ReturnPlayerToWorld(source)
-        
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🔄 Debug',
-            description = 'Bucket réinitialisé (retour monde normal)',
-            type = 'success'
-        })
-    end, false)
-    
-    -- Ajouter les suggestions de commandes
-    Citizen.CreateThread(function()
-        Wait(2000)
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_checkbucket', 
-            'Affiche votre routing bucket actuel')
-        
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_resetbucket', 
-            'Remet votre bucket dans le monde normal')
-    end)
-
-    RegisterCommand('gg_testcallback', function(source, args)
-        if source == 0 then
-            print("^3[GunGame Debug]^7 Cette commande doit être utilisée en jeu")
-            return
-        end
-        
-        print(string.format("^2[GunGame Debug]^7 Test callback pour joueur %d", source))
-        
-        lib.callback('gungame:getAvailableGames', source, function(games)
-            if games then
-                print(string.format("^2[GunGame Debug]^7 ✓ Callback réussi: %d parties", #games))
-                
-                TriggerClientEvent('chat:addMessage', source, {
-                    args = {"GunGame Debug", string.format("^2✓ Callback OK: %d parties", #games)}
-                })
-            else
-                print("^1[GunGame Debug]^7 ✗ Callback a retourné nil")
-                
-                TriggerClientEvent('chat:addMessage', source, {
-                    args = {"GunGame Debug", "^1✗ Callback a retourné nil"}
-                })
-            end
-        end)
-    end, false)
-    
-    Citizen.CreateThread(function()
-        Wait(2000)
-        TriggerClientEvent('chat:addSuggestion', -1, '/gg_testcallback', 
-            'Teste le callback des parties disponibles')
     end)
 end
 

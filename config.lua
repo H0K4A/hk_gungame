@@ -1,7 +1,30 @@
 Config = {}
 
 -- Activer/Désactiver le mode debug
-Config.Debug = true
+Config.Debug = false
+
+-- ============================================================================
+-- CONFIGURATION DU PED GUNGAME
+-- ============================================================================
+Config.GunGamePed = {
+    enabled = true,
+    model = "s_m_y_blackops_01", -- Modèle du PED
+    coords = vector4(1355.340698, -564.026368, 74.285766, 178.582688), -- Position + heading
+    
+    -- Interaction
+    interaction = {
+        distance = 2.5, -- Distance d'interaction
+        key = "E", -- Touche par défaut (ox_target si activé)
+        label = "🔫 Ouvrir le menu GunGame",
+        icon = "fa-solid fa-gamepad"
+    },
+    
+    -- Protection du PED
+    invincible = true,
+    frozen = true,
+    blockEvents = true,
+    text = "GunGame"
+}
 
 -- ============================================================================
 -- SYSTÈME DE ROTATION DES MAPS - NOUVEAU SYSTÈME 2 MAPS
@@ -526,10 +549,6 @@ Config.Messages = {
 -- PERMISSIONS & COMMANDES
 -- ============================================================================
 Config.Commands = {
-    joinGame = {
-        name = "gungame",
-        description = "Accéder au menu du GunGame"
-    },
     leaveGame = {
         name = "leavegame",
         description = "Quitter la partie actuelle"

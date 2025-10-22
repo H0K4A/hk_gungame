@@ -7,7 +7,7 @@ game 'gta5'
 
 author 'Hoka'
 description 'GunGame avec système d\'instance et rotation de spawns multiples.'
-version '1.2.5'
+version '1.3.0'
 lua54 'yes'
 
 shared_scripts {
@@ -23,4 +23,9 @@ client_scripts {
 server_scripts {
     'server/sv_utils.lua',
     'server/sv_main.lua'
+}
+
+escrow_ignore {
+    'config.lua',
+    'locales/*.lua'
 }
