@@ -654,15 +654,30 @@ AddEventHandler('gungame:syncLeaderboard', function(data)
 end)
 
 -- ============================================================================
--- DÉTECTION DES KILLS - PARTIE MODIFIÉE
+-- DÉTECTION DES KILLS - VERSION SIMPLIFIÉE ET FONCTIONNELLE
 -- ============================================================================
 
--- ============================================================================
--- DÉTECTION DES KILLS - VERSION AMÉLIORÉE
--- ============================================================================
+local lastKillTime = 0
+local killCooldown = 500 -- Réduit à 500ms pour meilleure réactivité
+local recentKills = {} -- Cache des kills récents pour éviter doublons
 
-local lastKillVictim = nil
-local lastKillWeapon = nil
+-- Nettoyer le cache des kills toutes les 2 secondes
+Citizen.CreateThread(function()
+    while true do
+        Wait(2000)
+        local currentTime = GetGameTimer()
+        
+        for victim, killTime in pairs(recentKills) do
+            if currentTime - killTime > 2000 then
+                recentKills[victim] = nil
+            end
+        end
+    end
+end)
+
+-- ============================================================================
+-- MÉTHODE 1 : gameEventTriggered (PRIORITAIRE)
+-- ============================================================================
 
 AddEventHandler('gameEventTriggered', function(eventName, data)
     if not playerData.inGame then return end
@@ -674,69 +689,89 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
         local weaponHash = data[5]
         
         local playerPed = PlayerPedId()
+        local currentTime = GetGameTimer()
         
-        -- Vérifier que c'est bien nous qui avons tué
-        if isDead and attacker == playerPed and victim ~= playerPed then
-            local currentTime = GetGameTimer()
-            
-            -- Éviter les doublons
-            if lastKillVictim == victim and (currentTime - lastKillTime) < killCooldown then
-                return
+        -- Vérifications de base
+        if not isDead then return end
+        if attacker ~= playerPed then return end
+        if victim == playerPed then return end -- Pas de suicide
+        
+        -- Anti-doublon
+        if recentKills[victim] then
+            print("^3[GunGame]^7 Kill déjà enregistré (doublon évité)")
+            return
+        end
+        
+        -- Cooldown global
+        if currentTime - lastKillTime < killCooldown then
+            print("^3[GunGame]^7 Cooldown actif")
+            return
+        end
+        
+        -- Enregistrer le kill
+        lastKillTime = currentTime
+        recentKills[victim] = currentTime
+        
+        print("^2[GunGame Kill]^7 ✅ Kill détecté!")
+        
+        -- Différencier joueur/bot
+        if IsPedAPlayer(victim) then
+            local targetPlayerId = NetworkGetPlayerIndexFromPed(victim)
+            if targetPlayerId ~= -1 then
+                local targetServerId = GetPlayerServerId(targetPlayerId)
+                print(string.format("^2[GunGame]^7 → Kill joueur: %d", targetServerId))
+                TriggerServerEvent('gungame:registerKill', targetServerId, false)
             end
-            
-            lastKillTime = currentTime
-            lastKillVictim = victim
-            lastKillWeapon = weaponHash
-            
-            print("^2[GunGame Kill]^7 Kill détecté! Envoi au serveur...")
-            
-            -- Envoyer au serveur
-            if IsPedAPlayer(victim) then
-                local targetPlayerId = NetworkGetPlayerIndexFromPed(victim)
-                if targetPlayerId ~= -1 then
-                    local targetServerId = GetPlayerServerId(targetPlayerId)
-                    print(string.format("^2[GunGame Kill]^7 Kill joueur: %d", targetServerId))
-                    TriggerServerEvent('gungame:playerKill', targetServerId)
-                end
-            else
-                print("^2[GunGame Kill]^7 Kill NPC/Bot")
-                TriggerServerEvent('gungame:botKill')
-            end
+        else
+            print("^2[GunGame]^7 → Kill NPC/Bot")
+            TriggerServerEvent('gungame:registerKill', nil, true)
         end
     end
 end)
 
--- Système de détection alternatif (backup)
+-- ============================================================================
+-- MÉTHODE 2 : Détection par HasEntityBeenDamagedByWeapon (BACKUP)
+-- ============================================================================
+
 Citizen.CreateThread(function()
     while true do
         Wait(100)
         
         if playerData.inGame then
             local playerPed = PlayerPedId()
+            local playerWeapon = GetSelectedPedWeapon(playerPed)
             
-            -- Vérifier si on vise quelqu'un
-            if IsPlayerFreeAiming(PlayerId()) then
-                local hit, entity = GetEntityPlayerIsFreeAimingAt(PlayerId())
-                
-                if hit and DoesEntityExist(entity) and IsEntityAPed(entity) and IsEntityDead(entity) then
-                    local currentTime = GetGameTimer()
-                    
-                    -- Vérifier qu'on n'a pas déjà compté ce kill
-                    if lastKillVictim ~= entity and (currentTime - lastKillTime) > killCooldown then
-                        lastKillTime = currentTime
-                        lastKillVictim = entity
-                        
-                        print("^3[GunGame Kill Backup]^7 Kill détecté via backup!")
-                        
-                        if IsPedAPlayer(entity) then
-                            local targetPlayerId = NetworkGetPlayerIndexFromPed(entity)
-                            if targetPlayerId ~= -1 then
-                                local targetServerId = GetPlayerServerId(targetPlayerId)
-                                TriggerServerEvent('gungame:playerKill', targetServerId)
+            -- Scanner tous les peds proches
+            local coords = GetEntityCoords(playerPed)
+            local nearbyPeds = GetGamePool('CPed')
+            
+            for _, ped in ipairs(nearbyPeds) do
+                if ped ~= playerPed and DoesEntityExist(ped) then
+                    -- Vérifier si on a tué ce ped avec notre arme
+                    if HasEntityBeenDamagedByWeapon(ped, playerWeapon, 0) then
+                        if IsEntityDead(ped) and not recentKills[ped] then
+                            local currentTime = GetGameTimer()
+                            
+                            if currentTime - lastKillTime > killCooldown then
+                                lastKillTime = currentTime
+                                recentKills[ped] = currentTime
+                                
+                                print("^3[GunGame Backup]^7 Kill détecté via HasEntityBeenDamaged")
+                                
+                                if IsPedAPlayer(ped) then
+                                    local targetPlayerId = NetworkGetPlayerIndexFromPed(ped)
+                                    if targetPlayerId ~= -1 then
+                                        local targetServerId = GetPlayerServerId(targetPlayerId)
+                                        TriggerServerEvent('gungame:registerKill', targetServerId, false)
+                                    end
+                                else
+                                    TriggerServerEvent('gungame:registerKill', nil, true)
+                                end
                             end
-                        else
-                            TriggerServerEvent('gungame:botKill')
                         end
+                        
+                        -- Nettoyer le flag de dégâts
+                        ClearEntityLastDamageEntity(ped)
                     end
                 end
             end
@@ -746,49 +781,47 @@ Citizen.CreateThread(function()
     end
 end)
 
--- ============================================================================
--- SYNCHRONISATION DU COMPTEUR DEPUIS LE SERVEUR - NOUVEAU
--- ============================================================================
-
 RegisterNetEvent('gungame:syncWeaponKills')
 AddEventHandler('gungame:syncWeaponKills', function(newKillCount)
-    print(string.format("^2[GunGame Sync]^7 Réception weaponKills: %d -> %d", 
+    print(string.format("^2[GunGame Sync]^7 Kills: %d -> %d", 
         playerData.weaponKills or 0, newKillCount))
     
     playerData.weaponKills = newKillCount
     
-    -- Notification visuelle de progression
+    -- Notification visuelle
     local currentWeaponIndex = playerData.currentWeaponIndex or 1
     local maxWeapons = #Config.Weapons
-    local killsRequired = currentWeaponIndex == maxWeapons and Config.GunGame.killsForLastWeapon or Config.GunGame.killsPerWeapon
+    local killsRequired = currentWeaponIndex == maxWeapons 
+        and Config.GunGame.killsForLastWeapon 
+        or Config.GunGame.killsPerWeapon
     
     if newKillCount < killsRequired then
         local remaining = killsRequired - newKillCount
         lib.notify({
-            title = '🎯 Progression',
+            title = '🎯 Kill enregistré !',
             description = string.format('Encore %d kill(s) pour la prochaine arme', remaining),
-            type = 'inform',
+            type = 'success',
             duration = 2500
         })
     end
 end)
 
--- ============================================================================
--- RESET DU COMPTEUR LORS DU CHANGEMENT D'ARME
--- ============================================================================
-
 RegisterNetEvent('gungame:resetWeaponKills')
 AddEventHandler('gungame:resetWeaponKills', function()
-    print("^2[GunGame]^7 Réinitialisation weaponKills: " .. (playerData.weaponKills or 0) .. " -> 0")
+    print("^2[GunGame]^7 Reset weaponKills -> 0")
     playerData.weaponKills = 0
+    recentKills = {} -- Vider le cache
 end)
 
 RegisterNetEvent('gungame:updateWeaponIndex')
 AddEventHandler('gungame:updateWeaponIndex', function(newIndex)
-    print(string.format("^2[GunGame]^7 Arme: %d -> %d", playerData.currentWeaponIndex or 0, newIndex))
+    print(string.format("^2[GunGame]^7 Arme: %d -> %d", 
+        playerData.currentWeaponIndex or 0, newIndex))
     playerData.currentWeaponIndex = newIndex
     playerData.weaponKills = 0
+    recentKills = {} -- Vider le cache lors du changement d'arme
 end)
+
 -- ============================================================================
 -- DÉTECTION DES MORTS
 -- ============================================================================
@@ -1358,20 +1391,46 @@ AddEventHandler('gungame:updatePlayerList', function(playersList)
 end)
 
 -- ============================================================================
--- EXPORTS
+-- COMMANDE DE TEST (DEBUG)
 -- ============================================================================
 
-exports('isPlayerInGunGame', function()
-    return playerData.inGame
-end)
-
-exports('getGunGameInstanceId', function()
-    return playerData.inGame and playerData.instanceId or nil
-end)
-
-exports('getGunGameMapId', function()
-    return playerData.inGame and playerData.mapId or nil
-end)
+if Config.Debug then
+    RegisterCommand('gg_testkill', function()
+        if playerData.inGame then
+            print("^2[GunGame Test]^7 Simulation d'un kill...")
+            TriggerServerEvent('gungame:registerKill', nil, true)
+        else
+            lib.notify({
+                title = 'Erreur',
+                description = 'Vous devez être en partie',
+                type = 'error'
+            })
+        end
+    end, false)
+    
+    RegisterCommand('gg_mykills', function()
+        if playerData.inGame then
+            local maxWeapons = #Config.Weapons
+            local killsRequired = playerData.currentWeaponIndex == maxWeapons 
+                and Config.GunGame.killsForLastWeapon 
+                or Config.GunGame.killsPerWeapon
+            
+            lib.notify({
+                title = '📊 Statistiques',
+                description = string.format(
+                    'Arme: %d/%d\nKills: %d/%d\nTotal: %d',
+                    playerData.currentWeaponIndex or 1,
+                    maxWeapons,
+                    playerData.weaponKills or 0,
+                    killsRequired,
+                    playerData.totalKills or 0
+                ),
+                type = 'inform',
+                duration = 5000
+            })
+        end
+    end, false)
+end
 
 -- ============================================================================
 -- ROTATION DE MAP
@@ -1415,6 +1474,23 @@ AddEventHandler('gungame:clientRotationForceQuit', function()
     
     lib.hideTextUI()
 end)
+
+-- ============================================================================
+-- EXPORTS
+-- ============================================================================
+
+exports('isPlayerInGunGame', function()
+    return playerData.inGame
+end)
+
+exports('getGunGameInstanceId', function()
+    return playerData.inGame and playerData.instanceId or nil
+end)
+
+exports('getGunGameMapId', function()
+    return playerData.inGame and playerData.mapId or nil
+end)
+
 
 -- ============================================================================
 -- NETTOYAGE
