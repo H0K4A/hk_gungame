@@ -574,7 +574,7 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
         Wait(200)
     end
     
-    -- Donner l'arme avec durabilité 100 (max)
+    -- ✅ NOUVEAU: Donner l'arme avec durabilité 100 (max)
     local success = exports.ox_inventory:AddItem(source, weaponName, 1, {
         ammo = ammo,
         durability = 100  -- Durabilité au maximum
@@ -600,6 +600,53 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
         end)
     end
 end
+
+-- ============================================================================
+-- THREAD: MAINTIEN DE LA DURABILITÉ INFINIE
+-- ============================================================================
+
+-- Thread qui vérifie et répare la durabilité toutes les 2 secondes
+Citizen.CreateThread(function()
+    while true do
+        Wait(2000) -- Vérification toutes les 2 secondes
+        
+        for source, data in pairs(playerData) do
+            if data.inGame and data.currentWeapon then
+                local weaponName = Config.Weapons[data.currentWeapon]
+                
+                if weaponName then
+                    local weaponItem = exports.ox_inventory:GetItem(source, weaponName:lower(), nil, false)
+                    
+                    -- Si l'arme existe et que sa durabilité est inférieure à 100
+                    if weaponItem and weaponItem.metadata and weaponItem.metadata.durability then
+                        if weaponItem.metadata.durability < 100 then
+                            -- Réparer la durabilité
+                            exports.ox_inventory:SetDurability(source, weaponItem.slot, 100)
+                            
+                            if Config.Debug then
+                                print(string.format("^3[GunGame]^7 Durabilité réparée: %s -> 100%% (Joueur %d)", 
+                                    weaponName, source))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ============================================================================
+-- RETIRER UN JOUEUR DE L'INSTANCE
+-- ============================================================================
+
+RegisterNetEvent('gungame:leaveGame')
+AddEventHandler('gungame:leaveGame', function()
+    local source = source
+    if not playerData[source] then return end
+    
+    local instanceId = playerData[source].instanceId
+    removePlayerFromInstance(source, instanceId)
+end)
 
 function removePlayerFromInstance(source, instanceId)
     if not source or not tonumber(source) then
