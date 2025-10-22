@@ -71,7 +71,7 @@ Config.GunGame = {
     giveAmmoPerSpawn = 500,
     notifyOnKill = true,
     notifyOnDeath = true,
-    rewardPerWeapon = 2500
+    rewardPerWeapon = 125
 }
 
 -- ============================================================================

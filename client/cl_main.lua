@@ -102,6 +102,8 @@ end)
 RegisterNetEvent('gungame:openMenu')
 AddEventHandler('gungame:openMenu', function()
     
+    print("^2[GunGame Client]^7 Ouverture du menu...")
+    
     if not lib then
         print("^1[GunGame Client]^7 ERREUR: ox_lib n'est pas chargé!")
         TriggerEvent('chat:addMessage', {
@@ -122,16 +124,28 @@ AddEventHandler('gungame:openMenu', function()
         return
     end
     
+    print("^2[GunGame Client]^7 Appel du callback getAvailableGames...")
+    
     -- Récupérer les parties disponibles
     lib.callback('gungame:getAvailableGames', false, function(games)
+        print("^2[GunGame Client]^7 Callback reçu!")
+        
         if not games then
-            print("^1[GunGame Client]^7 ERREUR: Aucune partie disponible")
+            print("^1[GunGame Client]^7 ERREUR: games est nil")
             lib.notify({
                 title = 'Erreur',
                 description = 'Impossible de récupérer les parties',
                 type = 'error'
             })
             return
+        end
+        
+        print(string.format("^2[GunGame Client]^7 %d partie(s) disponible(s)", #games))
+        
+        -- Debug: afficher les parties
+        for i, game in ipairs(games) do
+            print(string.format("^3[GunGame Client]^7 [%d] %s - %d/%d joueurs", 
+                i, game.label or "???", game.currentPlayers or 0, game.maxPlayers or 0))
         end
         
         local options = {}
@@ -152,9 +166,29 @@ AddEventHandler('gungame:openMenu', function()
                 icon = icon,
                 disabled = isFull,
                 onSelect = function()
+                    print(string.format("^2[GunGame Client]^7 Sélection de la map: %s", game.mapId))
+                    
+                    lib.notify({
+                        title = 'GunGame',
+                        description = 'Connexion à ' .. game.label .. '...',
+                        type = 'inform',
+                        duration = 2000
+                    })
+                    
                     TriggerServerEvent('gungame:joinGame', game.mapId)
                 end
             })
+        end
+        
+        if #options == 0 then
+            print("^1[GunGame Client]^7 ERREUR: Aucune option dans le menu!")
+            
+            lib.notify({
+                title = 'Erreur',
+                description = 'Aucune partie disponible',
+                type = 'error'
+            })
+            return
         end
         
         -- Séparateur
@@ -169,7 +203,12 @@ AddEventHandler('gungame:openMenu', function()
         table.insert(options, {
             title = 'Fermer le menu',
             icon = 'fa-solid fa-xmark',
+            onSelect = function()
+                print("^2[GunGame Client]^7 Menu fermé")
+            end
         })
+        
+        print(string.format("^2[GunGame Client]^7 Enregistrement du menu avec %d options", #options))
         
         -- Enregistrer et afficher le menu
         lib.registerContext({
@@ -178,7 +217,10 @@ AddEventHandler('gungame:openMenu', function()
             options = options
         })
         
+        print("^2[GunGame Client]^7 Affichage du menu...")
         lib.showContext('gungame_main_menu')
+        
+        print("^2[GunGame Client]^7 Menu affiché avec succès!")
     end)
 end)
 
@@ -230,39 +272,58 @@ end)
 -- Quand on rejoint une partie
 RegisterNetEvent('gungame:teleportToGame')
 AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
+    print("^5[GunGame DEBUG]^7 TELEPORT EVENT RECU !")
     local ped = PlayerPedId()
-    
-    playerData.lastSpawnPoint = GetEntityCoords(ped)
+    local spawnPoint = spawn or Config.Maps[mapId].spawnPoints[1]
+
+    if not spawnPoint then
+        print("^1[GunGame]^7 ERREUR: Aucun spawn valide reçu")
+        return
+    end
+
+    -- Marquer l'état
     playerData.inGame = true
     playerData.instanceId = instanceId
     playerData.mapId = mapId
     playerData.kills = 0
     playerData.weaponKills = 0
     playerData.currentWeaponIndex = 1
-    
-    local spawnPoint = spawn or Config.Maps[mapId].spawnPoints[1]
-    
-    if not spawnPoint then
-        print("^1[GunGame]^7 ERREUR: Aucun spawn disponible")
-        return
-    end
-    
-    SetEntityCoords(ped, spawnPoint.x, spawnPoint.y, spawnPoint.z, false, false, false, false)
-    SetEntityHeading(ped, spawnPoint.heading)
-    
-    Wait(500)
-    
+
+    -- Transition propre
+    DoScreenFadeOut(500)
+    while not IsScreenFadedOut() do Wait(0) end
+
+    -- Attendre que le routing bucket soit bien actif
+    Wait(300)
+
+    -- TP propre
+    SetEntityCoords(ped, spawnPoint.x, spawnPoint.y, spawnPoint.z, false, false, false, true)
+    SetEntityHeading(ped, spawnPoint.heading or 0.0)
+    SetGameplayCamRelativeHeading(0.0)
+
+    -- Anti “walking after TP”
+    Wait(200)
+    ClearPedTasksImmediately(ped)
+
+    -- Rétablissement
+    DoScreenFadeIn(700)
+
+    -- Sécurité : god mode au spawn
     enableGodMode()
+
+    -- Blip + notif
     createGunGameZoneBlip(mapId)
-    TriggerServerEvent('gungame:playerEnteredInstance', instanceId, mapId)
-    
     lib.notify({
         title = 'GunGame',
         description = 'Vous avez rejoint ' .. Config.Maps[mapId].label,
         type = 'success',
         duration = 3000
     })
+
+    -- Informer le serveur
+    TriggerServerEvent('gungame:playerEnteredInstance', instanceId, mapId)
 end)
+
 
 -- ============================================================================
 -- RESPAWN

@@ -11,65 +11,91 @@ AddEventHandler('onServerResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     
     print("^2[GunGame Server]^7 ==========================================")
-    print("^2[GunGame Server]^7 Script démarré avec succès")
-    print("^2[GunGame Server]^7 Système de kills: " .. Config.GunGame.killsPerWeapon .. " kills par arme")
+    print("^2[GunGame Server]^7 🔧 DIAGNOSTIC DE DÉMARRAGE")
+    print("^2[GunGame Server]^7 ==========================================")
     
-    -- Vérifier ox_lib
-    if not lib then
-        print("^1[GunGame Server]^7 ERREUR CRITIQUE: ox_lib n'est pas chargé!")
-        print("^1[GunGame Server]^7 Ajoutez '@ox_lib/init.lua' dans fxmanifest.lua")
+    -- Test 1: ox_lib
+    if lib then
+        print("^2[GunGame Server]^7 ✓ ox_lib est chargé")
+        
+        if lib.callback then
+            print("^2[GunGame Server]^7 ✓ lib.callback existe")
+        else
+            print("^1[GunGame Server]^7 ✗ lib.callback n'existe pas!")
+        end
+    else
+        print("^1[GunGame Server]^7 ✗ ox_lib n'est pas chargé!")
+        print("^1[GunGame Server]^7    → Ajoutez 'ensure ox_lib' AVANT votre script dans server.cfg")
         return
     end
     
-    print("^2[GunGame Server]^7 ox_lib chargé avec succès")
-    
-    -- Vérifier ESX
+    -- Test 2: ESX
     local ESX = exports["es_extended"]:getSharedObject()
-    if not ESX then
-        print("^1[GunGame Server]^7 ERREUR: ESX n'est pas disponible!")
+    if ESX then
+        print("^2[GunGame Server]^7 ✓ ESX est chargé")
     else
-        print("^2[GunGame Server]^7 ESX chargé avec succès")
+        print("^1[GunGame Server]^7 ✗ ESX n'est pas chargé!")
     end
     
-    -- Initialiser la rotation si activée
+    -- Test 3: Config
+    if Config then
+        print("^2[GunGame Server]^7 ✓ Config chargé")
+        print(string.format("^2[GunGame Server]^7    → %d maps configurées", 
+            Config.Maps and #Config.Maps or 0))
+    else
+        print("^1[GunGame Server]^7 ✗ Config non trouvé!")
+    end
+    
+    -- Test 4: Rotation
     if Config.MapRotation and Config.MapRotation.enabled then
-        print("^2[GunGame Server]^7 Initialisation de la rotation...")
+        print("^2[GunGame Server]^7 ✓ Rotation activée")
+        
         if MapRotation then
             MapRotation.Initialize()
+            
             local activeMaps = MapRotation.GetActiveMaps()
             if activeMaps and #activeMaps > 0 then
-                print(string.format("^2[GunGame Server]^7 Rotation activée: %d/%d maps actives", 
-                    #activeMaps, 
-                    #Config.MapRotation.allMaps))
+                print(string.format("^2[GunGame Server]^7 ✓ %d map(s) active(s)", #activeMaps))
+                
+                for i, mapId in ipairs(activeMaps) do
+                    local mapData = Config.Maps[mapId]
+                    print(string.format("^3[GunGame Server]^7    [%d] %s (%s)", 
+                        i, 
+                        mapData and mapData.label or "Inconnu", 
+                        mapId))
+                end
             else
-                print("^1[GunGame Server]^7 ERREUR: Aucune map active après initialisation!")
+                print("^1[GunGame Server]^7 ✗ Aucune map active après initialisation!")
             end
         else
-            print("^1[GunGame Server]^7 ERREUR: MapRotation n'est pas défini!")
+            print("^1[GunGame Server]^7 ✗ MapRotation n'existe pas!")
         end
     else
-        print("^3[GunGame Server]^7 Rotation désactivée")
+        print("^3[GunGame Server]^7 ! Rotation désactivée")
+        print("^3[GunGame Server]^7    → Toutes les maps seront disponibles")
     end
     
-    -- Afficher les maps disponibles
-    if Config.MapRotation and Config.MapRotation.enabled then
-        print("^2[GunGame Server]^7 Maps en rotation:")
-        local activeMaps = MapRotation.GetActiveMaps()
-        if activeMaps then
-            for _, mapId in ipairs(activeMaps) do
-                local mapData = Config.Maps[mapId]
-                print(string.format("^3[GunGame Server]^7   - %s (%s)", mapId, mapData and mapData.label or "Inconnu"))
-            end
-        else
-            print("^1[GunGame Server]^7 ERREUR: Impossible de récupérer les maps actives")
-        end
+    -- Test 5: Managers
+    if InstanceManager then
+        print("^2[GunGame Server]^7 ✓ InstanceManager chargé")
     else
-        print("^2[GunGame Server]^7 Toutes les maps disponibles:")
-        for mapId, mapData in pairs(Config.Maps) do
-            print(string.format("^3[GunGame Server]^7   - %s (%s)", mapId, mapData.label))
-        end
+        print("^1[GunGame Server]^7 ✗ InstanceManager non chargé!")
     end
     
+    if SpawnSystem then
+        print("^2[GunGame Server]^7 ✓ SpawnSystem chargé")
+    else
+        print("^1[GunGame Server]^7 ✗ SpawnSystem non chargé!")
+    end
+    
+    if RoutingBucketManager then
+        print("^2[GunGame Server]^7 ✓ RoutingBucketManager chargé")
+    else
+        print("^1[GunGame Server]^7 ✗ RoutingBucketManager non chargé!")
+    end
+    
+    print("^2[GunGame Server]^7 ==========================================")
+    print("^2[GunGame Server]^7 🎮 Script prêt!")
     print("^2[GunGame Server]^7 ==========================================")
 end)
 
@@ -79,6 +105,9 @@ end)
 
 AddEventHandler('playerDropped', function(reason)
     local source = source
+    
+    -- ✅ NOUVEAU: NETTOYER LE ROUTING BUCKET
+    RoutingBucketManager.ReturnPlayerToWorld(source)
     
     if playerData[source] then
         local instanceId = playerData[source].instanceId
@@ -99,7 +128,6 @@ AddEventHandler('playerDropped', function(reason)
         playerInventories[source] = nil
     end
 end)
-
 -- ============================================================================
 -- COMMANDES
 -- ============================================================================
@@ -133,8 +161,16 @@ end, false)
 -- ============================================================================
 
 RegisterNetEvent('gungame:joinGame')
-AddEventHandler('gungame:joinGame', function(playerId, mapId)
-    local src = playerId or source
+AddEventHandler('gungame:joinGame', function(a, b)
+    local src, mapId
+
+    if b == nil then
+        src = source
+        mapId = a
+    else
+        src = a
+        mapId = b
+    end
     local xPlayer = ESX.GetPlayerFromId(src)
     
     if not xPlayer then return end
@@ -183,14 +219,28 @@ AddEventHandler('gungame:joinGame', function(playerId, mapId)
     exports.ox_inventory:ClearInventory(src)
     Wait(300)
     
-    -- INITIALISATION CORRECTE DU JOUEUR
+    -- ✅ NOUVEAU: ASSIGNER AU ROUTING BUCKET AVANT TOUT
+    local bucketAssigned = RoutingBucketManager.AssignPlayerToInstance(src, instance.id)
+    
+    if not bucketAssigned then
+        print("^1[GunGame]^7 ERREUR: Impossible d'assigner le joueur au bucket")
+        TriggerClientEvent('ox_lib:notify', src, {
+            title = 'Erreur',
+            description = 'Erreur d\'isolation',
+            type = 'error'
+        })
+        return
+    end
+    
+    -- INITIALISATION DU JOUEUR
     playerData[src] = {
         instanceId = instance.id,
         kills = 0,
         currentWeapon = 1,
-        weaponKills = 0,  -- ← Important: initialiser à 0
+        weaponKills = 0,
         totalKills = 0,
-        playerName = xPlayer.getName()
+        playerName = xPlayer.getName(),
+        inGame = true  -- ← IMPORTANT: marquer comme en jeu
     }
     
     table.insert(instance.players, src)
@@ -208,6 +258,9 @@ AddEventHandler('gungame:joinGame', function(playerId, mapId)
         print("^1[GunGame]^7 ERREUR: Aucun spawn disponible")
         return
     end
+    
+    -- ✅ ATTENDRE UN PEU AVANT LA TÉLÉPORTATION
+    Wait(500)
     
     TriggerClientEvent('gungame:teleportToGame', src, instance.id, mapId, spawn)
     
@@ -227,7 +280,9 @@ AddEventHandler('gungame:joinGame', function(playerId, mapId)
     updateInstancePlayerList(instance.id)
     
     if Config.Debug then
-        print(string.format("^2[GunGame]^7 %s a rejoint instance %d", xPlayer.getName(), instance.id))
+        local bucketId = RoutingBucketManager.GetPlayerBucket(src)
+        print(string.format("^2[GunGame]^7 %s a rejoint instance %d (Bucket %d)", 
+            xPlayer.getName(), instance.id, bucketId))
     end
 end)
 
@@ -601,6 +656,9 @@ function winnerDetected(source, instanceId)
             TriggerClientEvent('gungame:playerWon', playerId, xPlayer.getName(), reward)
             SpawnSystem.FreeSpawn(instanceId, playerId)
             
+            -- ✅ NOUVEAU: REMETTRE DANS LE MONDE NORMAL
+            RoutingBucketManager.ReturnPlayerToWorld(playerId)
+            
             if playerInventories[playerId] then
                 SetTimeout(3500, function()
                     restorePlayerInventory(playerId, playerInventories[playerId])
@@ -619,6 +677,7 @@ function winnerDetected(source, instanceId)
         MapRotation.OnVictory(mapId)
     end
 end
+
 
 -- ============================================================================
 -- DONNER UNE ARME
@@ -723,6 +782,9 @@ function removePlayerFromInstance(source, instanceId)
     
     instance.currentPlayers = math.max(0, (instance.currentPlayers or 1) - 1)
     
+    -- ✅ NOUVEAU: REMETTRE LE JOUEUR DANS LE MONDE NORMAL
+    RoutingBucketManager.ReturnPlayerToWorld(source)
+    
     if playerInventories[source] then
         restorePlayerInventory(source, playerInventories[source])
         playerInventories[source] = nil
@@ -735,6 +797,11 @@ function removePlayerFromInstance(source, instanceId)
     end
     
     updateInstancePlayerList(instanceId)
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Joueur %d retiré de l'instance %d (retour bucket 0)", 
+            source, instanceId))
+    end
 end
 
 -- ============================================================================
@@ -933,7 +1000,6 @@ end)
 
 RegisterNetEvent('gungame:rotationForcedQuit')
 AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
-    -- Si targetSource n'est pas fourni, utiliser source
     local source = targetSource or source
     
     if not playerData[source] then return end
@@ -942,12 +1008,11 @@ AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
     local data = playerData[source]
     
     if data and instanceId then
-        -- Libérer le spawn
-        if SpawnSystem then
-            SpawnSystem.FreeSpawn(instanceId, source)
-        end
+        SpawnSystem.FreeSpawn(instanceId, source)
         
-        -- Restaurer l'inventaire
+        -- ✅ NOUVEAU: REMETTRE DANS LE MONDE NORMAL
+        RoutingBucketManager.ReturnPlayerToWorld(source)
+        
         if playerInventories[source] then
             SetTimeout(500, function()
                 restorePlayerInventory(source, playerInventories[source])
@@ -955,7 +1020,6 @@ AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
             end)
         end
         
-        -- Notifier le joueur
         TriggerClientEvent('ox_lib:notify', source, {
             title = '🔄 Changement de Map',
             description = 'La map va changer, retour au lobby',
@@ -963,10 +1027,8 @@ AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
             duration = 4000
         })
         
-        -- Déclencher le nettoyage côté client
         TriggerClientEvent('gungame:clientRotationForceQuit', source)
         
-        -- Supprimer du serveur après 1 seconde
         SetTimeout(1000, function()
             if playerData[source] then
                 removePlayerFromInstance(source, instanceId)
@@ -974,6 +1036,21 @@ AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
         end)
     end
 end)
+
+function ArePlayersInSameInstance(source1, source2)
+    if not playerData[source1] or not playerData[source2] then
+        return false
+    end
+    
+    local instance1 = playerData[source1].instanceId
+    local instance2 = playerData[source2].instanceId
+    
+    if not instance1 or not instance2 then
+        return false
+    end
+    
+    return instance1 == instance2 and RoutingBucketManager.ArePlayersInSameBucket(source1, source2)
+end
 
 -- ============================================================================
 -- COMMANDE ADMIN POUR FORCER LA ROTATION
@@ -1009,58 +1086,99 @@ if lib and lib.callback then
     print("^2[GunGame Server]^7 Enregistrement des callbacks...")
     
     lib.callback.register('gungame:getAvailableGames', function(source)
-        print("^2[GunGame Server]^7 Callback getAvailableGames appelé par " .. tostring(source))
+        print(string.format("^2[GunGame Server]^7 Callback getAvailableGames appelé par joueur %d", source))
         
         local games = {}
         
         if Config.MapRotation and Config.MapRotation.enabled and MapRotation then
+            print("^2[GunGame Server]^7 Rotation activée, récupération des maps actives...")
+            
             games = MapRotation.GetAvailableGames()
-            print("^2[GunGame Server]^7 Rotation activée, " .. #games .. " partie(s) disponible(s)")
+            
+            if not games then
+                print("^1[GunGame Server]^7 ERREUR: GetAvailableGames() a retourné nil!")
+                games = {}
+            end
+            
+            print(string.format("^2[GunGame Server]^7 Rotation activée, %d partie(s) disponible(s)", #games))
+            
+            -- Debug détaillé
+            for i, game in ipairs(games) do
+                print(string.format("^3[GunGame Server]^7   [%d] %s (%s) - %d/%d joueurs", 
+                    i, 
+                    game.label or "???", 
+                    game.mapId or "???",
+                    game.currentPlayers or 0, 
+                    game.maxPlayers or 0))
+            end
         else
             print("^3[GunGame Server]^7 Rotation désactivée, affichage de toutes les maps")
             
+            local count = 0
             for mapId, mapData in pairs(Config.Maps) do
+                count = count + 1
+                print(string.format("^3[GunGame Server]^7 Traitement map %d: %s", count, mapId))
+                
                 local instance = InstanceManager.FindOrCreateInstance(mapId)
                 
                 if instance then
-                    table.insert(games, {
+                    local gameData = {
                         mapId = mapId,
                         label = mapData.label or mapData.name or mapId,
                         currentPlayers = instance.currentPlayers or 0,
                         maxPlayers = Config.InstanceSystem.maxPlayersPerInstance or 20,
                         isActive = instance.gameActive or false
-                    })
+                    }
                     
-                    print(string.format("^2[GunGame Server]^7 Map: %s (%d/%d joueurs)", 
-                        mapData.label or mapId, 
-                        instance.currentPlayers or 0, 
-                        Config.InstanceSystem.maxPlayersPerInstance or 20))
+                    table.insert(games, gameData)
+                    
+                    print(string.format("^2[GunGame Server]^7   ✓ Map: %s (%d/%d joueurs)", 
+                        gameData.label, 
+                        gameData.currentPlayers, 
+                        gameData.maxPlayers))
+                else
+                    print(string.format("^1[GunGame Server]^7   ✗ Impossible de créer instance pour %s", mapId))
                 end
             end
+            
+            print(string.format("^2[GunGame Server]^7 Total: %d maps ajoutées", #games))
         end
         
         if not games or #games == 0 then
-            print("^1[GunGame Server]^7 ATTENTION: Aucune partie disponible!")
-            games = {}
+            print("^1[GunGame Server]^7 ATTENTION: Aucune partie disponible à retourner!")
+            
+            -- Créer une entrée de fallback pour le debug
+            games = {{
+                mapId = "debug",
+                label = "⚠️ ERREUR - Aucune map disponible",
+                currentPlayers = 0,
+                maxPlayers = 0,
+                isActive = false
+            }}
         end
+        
+        print(string.format("^2[GunGame Server]^7 Retour de %d partie(s) au joueur %d", #games, source))
         
         return games
     end)
     
     lib.callback.register('gungame:getRotationInfo', function(source)
-        print("^2[GunGame Server]^7 Callback getRotationInfo appelé par " .. tostring(source))
+        print(string.format("^2[GunGame Server]^7 Callback getRotationInfo appelé par joueur %d", source))
         
         if Config.MapRotation and Config.MapRotation.enabled and MapRotation then
             local info = MapRotation.GetRotationInfo()
+            print(string.format("^2[GunGame Server]^7 Retour info rotation au joueur %d", source))
             return info
         end
         
+        print("^3[GunGame Server]^7 Rotation désactivée, retour nil")
         return nil
     end)
     
-    print("^2[GunGame Server]^7 Callbacks enregistrés avec succès!")
+    print("^2[GunGame Server]^7 ✓ Callbacks enregistrés avec succès!")
 else
-    print("^1[GunGame Server]^7 ERREUR: ox_lib n'est pas disponible!")
+    print("^1[GunGame Server]^7 ✗ ERREUR CRITIQUE: ox_lib n'est pas disponible!")
+    print("^1[GunGame Server]^7    Vérifiez que ox_lib est bien démarré AVANT gungame")
 end
 
 -- ============================================================================
@@ -1597,6 +1715,115 @@ if Config.Debug then
         
         print("^2[GunGame Dev]^7 Commandes de développement chargées")
     end)
+
+    RegisterCommand('gg_checkbucket', function(source, args)
+        if source == 0 then return end
+        
+        local bucket = RoutingBucketManager.GetPlayerBucket(source)
+        local instanceId = playerData[source] and playerData[source].instanceId
+        
+        TriggerClientEvent('chat:addMessage', source, {
+            args = {
+                "GunGame Debug",
+                string.format("^2Votre bucket: %d | Instance: %s", 
+                    bucket, 
+                    instanceId and tostring(instanceId) or "Aucune")
+            }
+        })
+        
+        if instanceId then
+            local instance = InstanceManager.GetInstance(instanceId)
+            if instance then
+                local instanceBucket = RoutingBucketManager.GetInstanceBucket(instanceId)
+                TriggerClientEvent('chat:addMessage', source, {
+                    args = {
+                        "",
+                        string.format("^3Instance %d: Bucket %d | Joueurs: %d/%d", 
+                            instanceId, 
+                            instanceBucket or 0,
+                            instance.currentPlayers or 0,
+                            instance.maxPlayers or 0)
+                    }
+                })
+            end
+        end
+    end, false)
+    
+    RegisterCommand('gg_buckets', function(source, args)
+        if source == 0 then
+            print("^2[GunGame Debug]^7 ===== ROUTING BUCKETS =====")
+            
+            -- Liste des instances et leurs buckets
+            for instanceId, instance in pairs(InstanceManager.GetAllInstances()) do
+                local bucketId = RoutingBucketManager.GetInstanceBucket(instanceId)
+                print(string.format("^3Instance %d^7: Map=%s, Bucket=%d, Joueurs=%d", 
+                    instanceId, 
+                    instance.map, 
+                    bucketId or 0,
+                    instance.currentPlayers or 0))
+            end
+            
+            print("^2[GunGame Debug]^7 ============================")
+        else
+            TriggerClientEvent('chat:addMessage', source, {
+                args = {"GunGame Debug", "^1Cette commande est réservée à la console"}
+            })
+        end
+    end, false)
+    
+    RegisterCommand('gg_resetbucket', function(source, args)
+        if source == 0 then return end
+        
+        RoutingBucketManager.ReturnPlayerToWorld(source)
+        
+        TriggerClientEvent('ox_lib:notify', source, {
+            title = '🔄 Debug',
+            description = 'Bucket réinitialisé (retour monde normal)',
+            type = 'success'
+        })
+    end, false)
+    
+    -- Ajouter les suggestions de commandes
+    Citizen.CreateThread(function()
+        Wait(2000)
+        
+        TriggerClientEvent('chat:addSuggestion', -1, '/gg_checkbucket', 
+            'Affiche votre routing bucket actuel')
+        
+        TriggerClientEvent('chat:addSuggestion', -1, '/gg_resetbucket', 
+            'Remet votre bucket dans le monde normal')
+    end)
+
+    RegisterCommand('gg_testcallback', function(source, args)
+        if source == 0 then
+            print("^3[GunGame Debug]^7 Cette commande doit être utilisée en jeu")
+            return
+        end
+        
+        print(string.format("^2[GunGame Debug]^7 Test callback pour joueur %d", source))
+        
+        lib.callback('gungame:getAvailableGames', source, function(games)
+            if games then
+                print(string.format("^2[GunGame Debug]^7 ✓ Callback réussi: %d parties", #games))
+                
+                TriggerClientEvent('chat:addMessage', source, {
+                    args = {"GunGame Debug", string.format("^2✓ Callback OK: %d parties", #games)}
+                })
+            else
+                print("^1[GunGame Debug]^7 ✗ Callback a retourné nil")
+                
+                TriggerClientEvent('chat:addMessage', source, {
+                    args = {"GunGame Debug", "^1✗ Callback a retourné nil"}
+                })
+            end
+        end)
+    end, false)
+    
+    Citizen.CreateThread(function()
+        Wait(2000)
+        TriggerClientEvent('chat:addSuggestion', -1, '/gg_testcallback', 
+            'Teste le callback des parties disponibles')
+    end)
 end
 
 -- ============================================================================
@@ -1617,4 +1844,16 @@ end)
 
 exports('getPlayerWeaponKills', function(source)
     return playerData[source] and playerData[source].weaponKills or 0
+end)
+
+exports('getPlayerBucket', function(source)
+    return RoutingBucketManager.GetPlayerBucket(source)
+end)
+
+exports('getInstanceBucket', function(instanceId)
+    return RoutingBucketManager.GetInstanceBucket(instanceId)
+end)
+
+exports('arePlayersInSameInstance', function(source1, source2)
+    return ArePlayersInSameInstance(source1, source2)
 end)

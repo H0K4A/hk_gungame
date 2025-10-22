@@ -1,5 +1,5 @@
 -- ============================================================================
--- GUNGAME v2.0.0 - server/sv_utils.lua - ROTATION 2 MAPS
+-- GUNGAME v2.0.0 - server/sv_utils.lua - AVEC ROUTING BUCKETS
 -- ============================================================================
 
 -- ============================================================================
@@ -155,7 +155,122 @@ Citizen.CreateThread(function()
 end)
 
 -- ============================================================================
--- INSTANCE MANAGER - Gestion des instances
+-- ROUTING BUCKET MANAGER - NOUVEAU SYSTÈME D'ISOLATION
+-- ============================================================================
+
+RoutingBucketManager = {}
+local playerRoutingBuckets = {} -- Suivi des buckets par joueur
+local instanceRoutingBuckets = {} -- Suivi des buckets par instance
+local nextBucketId = 100 -- Commencer à 100 pour éviter les buckets par défaut
+
+-- Réserver le bucket 0 pour le monde normal
+local WORLD_BUCKET = 0
+
+function RoutingBucketManager.AssignPlayerToInstance(source, instanceId)
+    if not source or source == 0 then
+        print("^1[RoutingBucket]^7 ERREUR: source invalide")
+        return false
+    end
+    
+    if not instanceId then
+        print("^1[RoutingBucket]^7 ERREUR: instanceId invalide")
+        return false
+    end
+    
+    -- Créer ou récupérer le bucket pour cette instance
+    local bucketId = instanceRoutingBuckets[instanceId]
+    
+    if not bucketId then
+        bucketId = nextBucketId
+        nextBucketId = nextBucketId + 1
+        instanceRoutingBuckets[instanceId] = bucketId
+        
+        print(string.format("^2[RoutingBucket]^7 Création bucket %d pour instance %d", 
+            bucketId, instanceId))
+    end
+    
+    -- Assigner le joueur au bucket
+    SetPlayerRoutingBucket(source, bucketId)
+    playerRoutingBuckets[source] = bucketId
+    
+    -- Configuration du bucket (important pour la visibilité)
+    SetRoutingBucketPopulationEnabled(bucketId, false) -- Désactiver les entités aléatoires
+    
+    if Config.Debug then
+        print(string.format("^2[RoutingBucket]^7 Joueur %d -> Bucket %d (Instance %d)", 
+            source, bucketId, instanceId))
+    end
+    
+    return true
+end
+
+function RoutingBucketManager.ReturnPlayerToWorld(source)
+    if not source or source == 0 then
+        print("^1[RoutingBucket]^7 ERREUR: source invalide")
+        return false
+    end
+    
+    local oldBucket = playerRoutingBuckets[source]
+    
+    -- Remettre le joueur dans le monde normal (bucket 0)
+    SetPlayerRoutingBucket(source, WORLD_BUCKET)
+    playerRoutingBuckets[source] = nil
+    
+    if Config.Debug and oldBucket then
+        print(string.format("^3[RoutingBucket]^7 Joueur %d: Bucket %d -> Monde normal (0)", 
+            source, oldBucket))
+    end
+    
+    return true
+end
+
+function RoutingBucketManager.GetPlayerBucket(source)
+    return playerRoutingBuckets[source] or WORLD_BUCKET
+end
+
+function RoutingBucketManager.GetInstanceBucket(instanceId)
+    return instanceRoutingBuckets[instanceId]
+end
+
+function RoutingBucketManager.CleanupInstance(instanceId)
+    if not instanceId then return end
+    
+    local bucketId = instanceRoutingBuckets[instanceId]
+    
+    if bucketId then
+        if Config.Debug then
+            print(string.format("^3[RoutingBucket]^7 Nettoyage bucket %d (Instance %d)", 
+                bucketId, instanceId))
+        end
+        
+        -- Optionnel: on peut garder le bucket pour réutilisation
+        -- ou le supprimer complètement
+        instanceRoutingBuckets[instanceId] = nil
+    end
+end
+
+function RoutingBucketManager.ArePlayersInSameBucket(source1, source2)
+    local bucket1 = playerRoutingBuckets[source1] or WORLD_BUCKET
+    local bucket2 = playerRoutingBuckets[source2] or WORLD_BUCKET
+    return bucket1 == bucket2
+end
+
+-- Nettoyage automatique des joueurs déconnectés
+AddEventHandler('playerDropped', function(reason)
+    local source = source
+    
+    if playerRoutingBuckets[source] then
+        playerRoutingBuckets[source] = nil
+        
+        if Config.Debug then
+            print(string.format("^3[RoutingBucket]^7 Joueur %d déconnecté, nettoyage bucket", 
+                source))
+        end
+    end
+end)
+
+-- ============================================================================
+-- INSTANCE MANAGER - Gestion des instances (MODIFIÉ)
 -- ============================================================================
 
 InstanceManager = {}
@@ -186,7 +301,7 @@ function InstanceManager.FindOrCreateInstance(mapId)
             currentPlayers = 0,
             playersData = {},
             maxPlayers = Config.InstanceSystem.maxPlayersPerInstance or 20,
-            lastActivity = os.time() -- Timestamp de dernière activité
+            lastActivity = os.time()
         }
         
         instances[instanceId] = newInstance
@@ -225,6 +340,9 @@ function InstanceManager.RemoveInstance(instanceId)
     if not instances[instanceId] then
         return false
     end
+    
+    -- ✅ NOUVEAU: Nettoyer le routing bucket
+    RoutingBucketManager.CleanupInstance(instanceId)
     
     instances[instanceId] = nil
     
@@ -265,9 +383,9 @@ end)
 -- ============================================================================
 
 MapRotation = {}
-local activeMaps = {} -- Les 2 maps actuellement actives
-local usedMapIndexes = {} -- Historique des maps utilisées
-local mapIdleTimers = {} -- Timers d'inactivité pour chaque map
+local activeMaps = {}
+local usedMapIndexes = {}
+local mapIdleTimers = {}
 
 function MapRotation.Initialize()
     if not Config.MapRotation or not Config.MapRotation.enabled then
@@ -280,7 +398,6 @@ function MapRotation.Initialize()
         return
     end
     
-    -- Sélectionner 2 maps aléatoires au démarrage
     activeMaps = MapRotation.SelectRandomMaps(Config.MapRotation.simultaneousMaps or 2)
     
     print("^2[MapRotation]^7 ==========================================")
@@ -292,7 +409,6 @@ function MapRotation.Initialize()
     end
     print("^2[MapRotation]^7 ==========================================")
     
-    -- Démarrer la surveillance d'inactivité
     MapRotation.StartIdleMonitoring()
 end
 
@@ -301,12 +417,10 @@ function MapRotation.SelectRandomMaps(count)
     local selected = {}
     local available = {}
     
-    -- Créer une liste des maps disponibles
     for _, mapId in ipairs(allMaps) do
         table.insert(available, mapId)
     end
     
-    -- Sélectionner 'count' maps aléatoires
     for i = 1, math.min(count, #available) do
         local randomIndex = math.random(1, #available)
         table.insert(selected, available[randomIndex])
@@ -317,7 +431,6 @@ function MapRotation.SelectRandomMaps(count)
 end
 
 function MapRotation.GetActiveMaps()
-    -- S'assurer qu'on retourne toujours une table valide
     if not activeMaps then
         activeMaps = {}
     end
@@ -336,11 +449,9 @@ end
 function MapRotation.GetAvailableGames()
     local games = {}
     
-    -- Vérifier que activeMaps est initialisé
     if not activeMaps or #activeMaps == 0 then
         print("^1[MapRotation]^7 ERREUR: activeMaps non initialisé ou vide")
         
-        -- Fallback: initialiser avec 2 maps aléatoires
         if Config.MapRotation and Config.MapRotation.allMaps and #Config.MapRotation.allMaps >= 2 then
             activeMaps = MapRotation.SelectRandomMaps(Config.MapRotation.simultaneousMaps or 2)
             print("^3[MapRotation]^7 Fallback: activation de 2 maps aléatoires")
@@ -378,7 +489,6 @@ function MapRotation.ReplaceMap(oldMapId, reason)
     local allMaps = Config.MapRotation.allMaps
     local available = {}
     
-    -- Trouver les maps non utilisées
     for _, mapId in ipairs(allMaps) do
         local isActive = false
         for _, activeMapId in ipairs(activeMaps) do
@@ -398,12 +508,10 @@ function MapRotation.ReplaceMap(oldMapId, reason)
         return false
     end
     
-    -- Sélectionner une map aléatoire
     local newMapId = available[math.random(1, #available)]
     local oldMapData = Config.Maps[oldMapId]
     local newMapData = Config.Maps[newMapId]
     
-    -- Remplacer dans la liste active
     for i, mapId in ipairs(activeMaps) do
         if mapId == oldMapId then
             activeMaps[i] = newMapId
@@ -416,17 +524,14 @@ function MapRotation.ReplaceMap(oldMapId, reason)
         oldMapData and oldMapData.label or oldMapId, 
         newMapData and newMapData.label or newMapId))
     
-    -- Notifier tous les joueurs
     TriggerClientEvent('gungame:notifyMapRotation', -1, {
         previousMap = oldMapData and oldMapData.label or oldMapId,
         newMap = newMapData and newMapData.label or newMapId,
         reason = reason
     })
     
-    -- Forcer les joueurs de cette map à quitter
     MapRotation.KickPlayersFromMap(oldMapId)
     
-    -- Réinitialiser le timer d'inactivité
     mapIdleTimers[newMapId] = os.time()
     mapIdleTimers[oldMapId] = nil
     
@@ -436,7 +541,6 @@ end
 function MapRotation.KickPlayersFromMap(mapId)
     local affectedPlayers = {}
     
-    -- Trouver toutes les instances de cette map
     for instanceId, instance in pairs(InstanceManager.GetAllInstances()) do
         if instance.map == mapId and instance.players then
             for _, playerId in ipairs(instance.players) do
@@ -472,27 +576,24 @@ end
 
 function MapRotation.CheckIdleMaps()
     local currentTime = os.time()
-    local idleThreshold = (Config.MapRotation.idleRotationInterval or 3600000) / 1000 -- Convertir en secondes
+    local idleThreshold = (Config.MapRotation.idleRotationInterval or 3600000) / 1000
     
     for _, mapId in ipairs(activeMaps) do
-        -- Vérifier si la map a des joueurs
         local hasPlayers = false
         
         for instanceId, instance in pairs(InstanceManager.GetAllInstances()) do
             if instance.map == mapId and instance.currentPlayers and instance.currentPlayers > 0 then
                 hasPlayers = true
-                mapIdleTimers[mapId] = currentTime -- Reset timer
+                mapIdleTimers[mapId] = currentTime
                 break
             end
         end
         
         if not hasPlayers then
-            -- Initialiser le timer si nécessaire
             if not mapIdleTimers[mapId] then
                 mapIdleTimers[mapId] = currentTime
             end
             
-            -- Vérifier si le délai d'inactivité est dépassé
             local idleTime = currentTime - mapIdleTimers[mapId]
             
             if idleTime >= idleThreshold then
@@ -505,15 +606,13 @@ function MapRotation.CheckIdleMaps()
 end
 
 function MapRotation.StartIdleMonitoring()
-    -- Initialiser les timers
     for _, mapId in ipairs(activeMaps) do
         mapIdleTimers[mapId] = os.time()
     end
     
-    -- Thread de surveillance
     Citizen.CreateThread(function()
         while Config.MapRotation.enabled do
-            Wait(60000) -- Vérifier toutes les minutes
+            Wait(60000)
             
             if Config.MapRotation.rotateEmptyMaps then
                 MapRotation.CheckIdleMaps()

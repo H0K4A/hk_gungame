@@ -7,7 +7,7 @@ game 'gta5'
 
 author 'Hoka'
 description 'GunGame avec système d\'instance et rotation de spawns multiples.'
-version '1.2.2'
+version '1.2.5'
 lua54 'yes'
 
 shared_scripts {
