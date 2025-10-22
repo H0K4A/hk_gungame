@@ -40,6 +40,11 @@ RegisterCommand('leavegame', function()
         local ped = PlayerPedId()
         local lastSpawn = playerData.lastSpawnPoint
         
+        -- Fade out pour transition propre
+        DoScreenFadeOut(500)
+        while not IsScreenFadedOut() do Wait(0) end
+        
+        -- Nettoyer l'état
         playerData.inGame = false
         playerData.instanceId = nil
         playerData.mapId = nil
@@ -47,15 +52,50 @@ RegisterCommand('leavegame', function()
         playerData.weaponKills = 0
         playerData.currentWeapon = nil
         
+        -- Retirer armes et UI
         RemoveAllPedWeapons(ped, true)
         lib.hideTextUI()
         removeGunGameZoneBlip()
         RemoveAllPlayerBlips()
         
+        -- ✅ NOUVEAU : TP AMÉLIORÉ avec vérification
         if lastSpawn then
-            SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, false)
+            print(string.format("^2[GunGame]^7 Retour à la position: %.2f, %.2f, %.2f", 
+                lastSpawn.x, lastSpawn.y, lastSpawn.z))
+            
+            -- TP avec tous les flags pour éviter les bugs
+            SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
+            
+            -- Attendre que le TP soit effectif
+            Wait(300)
+            
+            -- Vérifier que le TP a bien fonctionné
+            local newCoords = GetEntityCoords(ped)
+            local distance = #(vector3(lastSpawn.x, lastSpawn.y, lastSpawn.z) - newCoords)
+            
+            if distance > 5.0 then
+                print("^3[GunGame]^7 TP initial raté, nouvelle tentative...")
+                SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
+                Wait(200)
+            end
+            
+            -- S'assurer que le joueur est bien au sol
+            SetPedCoordsKeepVehicle(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z)
+            
+            -- Nettoyer les tâches pour éviter les animations bizarres
+            ClearPedTasksImmediately(ped)
+        else
+            print("^1[GunGame]^7 ERREUR: Aucune position sauvegardée!")
+            
+            -- Fallback : TP à l'hôpital
+            SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
+            Wait(200)
         end
         
+        -- Fade in
+        DoScreenFadeIn(700)
+        
+        -- Attendre un peu avant d'informer le serveur
         Wait(300)
         TriggerServerEvent('gungame:leaveGame')
         
@@ -65,6 +105,9 @@ RegisterCommand('leavegame', function()
             type = 'inform',
             duration = 2000
         })
+        
+        -- Réinitialiser la position sauvegardée
+        playerData.lastSpawnPoint = nil
     else
         lib.notify({
             title = 'Erreur',
@@ -73,7 +116,6 @@ RegisterCommand('leavegame', function()
         })
     end
 end, false)
-
 RegisterCommand('togglehud', function()
     hudVisible = not hudVisible
     
@@ -281,6 +323,17 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
         return
     end
 
+    -- ✅ NOUVEAU : SAUVEGARDER LA POSITION AVANT TP
+    local currentCoords = GetEntityCoords(ped)
+    playerData.lastSpawnPoint = {
+        x = currentCoords.x,
+        y = currentCoords.y,
+        z = currentCoords.z
+    }
+    
+    print(string.format("^2[GunGame]^7 Position sauvegardée: %.2f, %.2f, %.2f", 
+        currentCoords.x, currentCoords.y, currentCoords.z))
+
     -- Marquer l'état
     playerData.inGame = true
     playerData.instanceId = instanceId
@@ -301,7 +354,7 @@ AddEventHandler('gungame:teleportToGame', function(instanceId, mapId, spawn)
     SetEntityHeading(ped, spawnPoint.heading or 0.0)
     SetGameplayCamRelativeHeading(0.0)
 
-    -- Anti “walking after TP”
+    -- Anti "walking after TP"
     Wait(200)
     ClearPedTasksImmediately(ped)
 
@@ -976,14 +1029,31 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
     end
     
     SetTimeout(3000, function()
+        local lastSpawn = playerData.lastSpawnPoint
+        
+        -- Fade out
+        DoScreenFadeOut(500)
+        while not IsScreenFadedOut() do Wait(0) end
+        
+        -- Nettoyer
         RemoveAllPedWeapons(ped, true)
         removeGunGameZoneBlip()
         RemoveAllPlayerBlips()
         
-        if playerData.lastSpawnPoint then
-            SetEntityCoords(ped, playerData.lastSpawnPoint.x, playerData.lastSpawnPoint.y, playerData.lastSpawnPoint.z, false, false, false, false)
+        -- ✅ TP AMÉLIORÉ
+        if lastSpawn then
+            print(string.format("^2[GunGame Victory]^7 Retour position: %.2f, %.2f, %.2f", 
+                lastSpawn.x, lastSpawn.y, lastSpawn.z))
+            
+            SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
+            Wait(300)
+            ClearPedTasksImmediately(ped)
+        else
+            print("^3[GunGame Victory]^7 Pas de position, fallback hôpital")
+            SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
         end
         
+        -- Réinitialiser l'état
         playerData.inGame = false
         playerData.instanceId = nil
         playerData.mapId = nil
@@ -991,8 +1061,12 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
         playerData.weaponKills = 0
         playerData.currentWeapon = nil
         playerData.godMode = false
+        playerData.lastSpawnPoint = nil
         
         lib.hideTextUI()
+        
+        -- Fade in
+        DoScreenFadeIn(700)
     end)
 end)
 
@@ -1516,11 +1590,26 @@ end)
 RegisterNetEvent('gungame:clientRotationForceQuit')
 AddEventHandler('gungame:clientRotationForceQuit', function()
     local ped = PlayerPedId()
+    local lastSpawn = playerData.lastSpawnPoint
     
-    if playerData.lastSpawnPoint then
-        SetEntityCoords(ped, playerData.lastSpawnPoint.x, playerData.lastSpawnPoint.y, playerData.lastSpawnPoint.z, false, false, false, false)
+    -- Fade out
+    DoScreenFadeOut(500)
+    while not IsScreenFadedOut() do Wait(0) end
+    
+    -- ✅ TP AMÉLIORÉ
+    if lastSpawn then
+        print(string.format("^2[GunGame Rotation]^7 Retour position: %.2f, %.2f, %.2f", 
+            lastSpawn.x, lastSpawn.y, lastSpawn.z))
+        
+        SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
+        Wait(300)
+        ClearPedTasksImmediately(ped)
+    else
+        print("^3[GunGame Rotation]^7 Pas de position, fallback hôpital")
+        SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
     end
     
+    -- Nettoyer
     RemoveAllPedWeapons(ped, true)
     removeGunGameZoneBlip()
     RemoveAllPlayerBlips()
@@ -1532,8 +1621,12 @@ AddEventHandler('gungame:clientRotationForceQuit', function()
     playerData.weaponKills = 0
     playerData.currentWeapon = nil
     playerData.godMode = false
+    playerData.lastSpawnPoint = nil
     
     lib.hideTextUI()
+    
+    -- Fade in
+    DoScreenFadeIn(700)
 end)
 
 -- ============================================================================
