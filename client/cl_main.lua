@@ -21,6 +21,7 @@ local blipUpdateInterval = 1000
 local lastKillTime = 0
 local killCooldown = 1000 -- 1 seconde entre chaque kill
 local trackedEntities = {}
+local leaderboardData = {}
 
 -- ============================================================================
 -- COMMANDES
@@ -640,8 +641,28 @@ function drawGunGameHUD()
 end
 
 -- ============================================================================
+-- SYNCHRONISATION DU LEADERBOARD
+-- ============================================================================
+
+RegisterNetEvent('gungame:syncLeaderboard')
+AddEventHandler('gungame:syncLeaderboard', function(data)
+    leaderboardData = data
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame Client]^7 Leaderboard reçu: %d joueurs", #data))
+    end
+end)
+
+-- ============================================================================
 -- DÉTECTION DES KILLS - PARTIE MODIFIÉE
 -- ============================================================================
+
+-- ============================================================================
+-- DÉTECTION DES KILLS - VERSION AMÉLIORÉE
+-- ============================================================================
+
+local lastKillVictim = nil
+local lastKillWeapon = nil
 
 AddEventHandler('gameEventTriggered', function(eventName, data)
     if not playerData.inGame then return end
@@ -658,38 +679,69 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
         if isDead and attacker == playerPed and victim ~= playerPed then
             local currentTime = GetGameTimer()
             
-            -- Éviter les doublons avec cooldown
-            if (currentTime - lastKillTime) >= killCooldown then
-                lastKillTime = currentTime
-                
-                -- NE PLUS INCRÉMENTER ICI - Laisser le serveur gérer
-                print("^2[GunGame Kill]^7 Kill détecté! Envoi au serveur...")
-                
-                -- Envoyer au serveur
-                if IsPedAPlayer(victim) then
-                    local targetPlayerId = NetworkGetPlayerIndexFromPed(victim)
-                    if targetPlayerId ~= -1 then
-                        local targetServerId = GetPlayerServerId(targetPlayerId)
-                        print(string.format("^2[GunGame Kill]^7 Kill joueur: %d", targetServerId))
-                        TriggerServerEvent('gungame:playerKill', targetServerId)
-                    end
-                else
-                    print("^2[GunGame Kill]^7 Kill NPC/Bot")
-                    TriggerServerEvent('gungame:botKill')
-                end
-                
-                -- Notification visuelle locale (optionnelle)
-                lib.notify({
-                    title = '💀 KILL',
-                    description = 'Élimination confirmée!',
-                    type = 'success',
-                    duration = 1500,
-                    position = 'top'
-                })
-            else
-                print(string.format("^3[GunGame Kill]^7 Kill ignoré (cooldown: %dms restants)", 
-                    killCooldown - (currentTime - lastKillTime)))
+            -- Éviter les doublons
+            if lastKillVictim == victim and (currentTime - lastKillTime) < killCooldown then
+                return
             end
+            
+            lastKillTime = currentTime
+            lastKillVictim = victim
+            lastKillWeapon = weaponHash
+            
+            print("^2[GunGame Kill]^7 Kill détecté! Envoi au serveur...")
+            
+            -- Envoyer au serveur
+            if IsPedAPlayer(victim) then
+                local targetPlayerId = NetworkGetPlayerIndexFromPed(victim)
+                if targetPlayerId ~= -1 then
+                    local targetServerId = GetPlayerServerId(targetPlayerId)
+                    print(string.format("^2[GunGame Kill]^7 Kill joueur: %d", targetServerId))
+                    TriggerServerEvent('gungame:playerKill', targetServerId)
+                end
+            else
+                print("^2[GunGame Kill]^7 Kill NPC/Bot")
+                TriggerServerEvent('gungame:botKill')
+            end
+        end
+    end
+end)
+
+-- Système de détection alternatif (backup)
+Citizen.CreateThread(function()
+    while true do
+        Wait(100)
+        
+        if playerData.inGame then
+            local playerPed = PlayerPedId()
+            
+            -- Vérifier si on vise quelqu'un
+            if IsPlayerFreeAiming(PlayerId()) then
+                local hit, entity = GetEntityPlayerIsFreeAimingAt(PlayerId())
+                
+                if hit and DoesEntityExist(entity) and IsEntityAPed(entity) and IsEntityDead(entity) then
+                    local currentTime = GetGameTimer()
+                    
+                    -- Vérifier qu'on n'a pas déjà compté ce kill
+                    if lastKillVictim ~= entity and (currentTime - lastKillTime) > killCooldown then
+                        lastKillTime = currentTime
+                        lastKillVictim = entity
+                        
+                        print("^3[GunGame Kill Backup]^7 Kill détecté via backup!")
+                        
+                        if IsPedAPlayer(entity) then
+                            local targetPlayerId = NetworkGetPlayerIndexFromPed(entity)
+                            if targetPlayerId ~= -1 then
+                                local targetServerId = GetPlayerServerId(targetPlayerId)
+                                TriggerServerEvent('gungame:playerKill', targetServerId)
+                            end
+                        else
+                            TriggerServerEvent('gungame:botKill')
+                        end
+                    end
+                end
+            end
+        else
+            Wait(1000)
         end
     end
 end)

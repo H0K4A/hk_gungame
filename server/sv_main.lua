@@ -240,134 +240,92 @@ AddEventHandler('gungame:playerKill', function(targetSource)
     local source = source
     targetSource = tonumber(targetSource)
     
-    print("^3[GunGame]^7 ========================================")
-    print(string.format("^3[GunGame]^7 playerKill: source=%d, target=%d", source, targetSource or "nil"))
+    print("^3[GunGame Kill]^7 ========================================")
+    print(string.format("^3[GunGame Kill]^7 Tueur: %d | Victime: %d", source, targetSource or 0))
     
     -- Vérifications de base
     if not playerData[source] then
-        print("^1[GunGame]^7 ❌ playerData[" .. source .. "] introuvable")
-        print("^3[GunGame]^7 ========================================")
+        print("^1[GunGame Kill]^7 ❌ playerData[tueur] introuvable")
         return
     end
     
     if not playerData[targetSource] then
-        print("^1[GunGame]^7 ❌ playerData[" .. targetSource .. "] introuvable")
-        print("^3[GunGame]^7 ========================================")
+        print("^1[GunGame Kill]^7 ❌ playerData[victime] introuvable")
         return
     end
     
     local instanceId = playerData[source].instanceId
     local targetInstanceId = playerData[targetSource].instanceId
     
+    print(string.format("^3[GunGame Kill]^7 Instance tueur: %d | Instance victime: %d", 
+        instanceId or 0, targetInstanceId or 0))
+    
     if instanceId ~= targetInstanceId then
-        print("^1[GunGame]^7 ❌ Instances différentes")
-        print("^3[GunGame]^7 ========================================")
+        print("^1[GunGame Kill]^7 ❌ Instances différentes")
         return
     end
     
     local instance = InstanceManager.GetInstance(instanceId)
     
-    if not instance or not instance.gameActive then
-        print("^1[GunGame]^7 ❌ Instance invalide ou inactive")
-        print("^3[GunGame]^7 ========================================")
+    if not instance then
+        print("^1[GunGame Kill]^7 ❌ Instance introuvable")
         return
     end
     
-    -- ========================================================================
-    -- INCRÉMENTER LE COMPTEUR SERVEUR
-    -- ========================================================================
+    if not instance.gameActive then
+        print("^1[GunGame Kill]^7 ❌ Partie inactive")
+        return
+    end
     
-    print(string.format("^3[GunGame]^7 AVANT: kills=%d, weaponKills=%d, currentWeapon=%d", 
-        playerData[source].kills or 0,
-        playerData[source].weaponKills or 0,
-        playerData[source].currentWeapon or 0))
+    print("^2[GunGame Kill]^7 ✅ Toutes les vérifications passées!")
     
-    -- Incrémenter les compteurs
-    playerData[source].kills = (playerData[source].kills or 0) + 1
-    playerData[source].totalKills = (playerData[source].totalKills or 0) + 1
+    -- INCRÉMENTER
     playerData[source].weaponKills = (playerData[source].weaponKills or 0) + 1
+    playerData[source].totalKills = (playerData[source].totalKills or 0) + 1
     
-    print(string.format("^2[GunGame]^7 APRÈS: kills=%d, weaponKills=%d, currentWeapon=%d", 
-        playerData[source].kills,
-        playerData[source].weaponKills,
-        playerData[source].currentWeapon))
+    print(string.format("^2[GunGame Kill]^7 Nouveau compteur: %d kills", 
+        playerData[source].weaponKills))
     
-    -- ========================================================================
-    -- SYNCHRONISER AVEC LE CLIENT - IMPORTANT!
-    -- ========================================================================
-    
+    -- SYNCHRONISER
     TriggerClientEvent('gungame:syncWeaponKills', source, playerData[source].weaponKills)
     
     local currentWeaponIndex = playerData[source].currentWeapon
-    local weaponKills = playerData[source].weaponKills or 0
     local weaponsCount = #Config.Weapons
+    local killsRequired = currentWeaponIndex == weaponsCount 
+        and Config.GunGame.killsForLastWeapon 
+        or Config.GunGame.killsPerWeapon
     
-    InstanceManager.UpdateActivity(instanceId)
+    print(string.format("^2[GunGame Kill]^7 Progression: %d/%d", 
+        playerData[source].weaponKills, killsRequired))
     
-    -- Déterminer kills requis
-    local killsRequired
-    if currentWeaponIndex == weaponsCount then
-        killsRequired = Config.GunGame.killsForLastWeapon
-    else
-        killsRequired = Config.GunGame.killsPerWeapon
-    end
-    
+    -- Notifications
     local killerName = ESX.GetPlayerFromId(source).getName()
     local victimName = ESX.GetPlayerFromId(targetSource).getName()
     
-    print(string.format("^2[GunGame Kill]^7 %s → %s | %d/%d kills", 
-        killerName, victimName, weaponKills, killsRequired))
-    
-    -- Notification au tueur
     TriggerClientEvent('ox_lib:notify', source, {
         title = '💀 KILL !',
-        description = string.format('%s (%d/%d)', victimName, weaponKills, killsRequired),
+        description = string.format('%s (%d/%d)', victimName, 
+            playerData[source].weaponKills, killsRequired),
         type = 'success',
         duration = 3000
     })
     
-    -- Notification aux autres joueurs
-    for _, playerId in ipairs(instance.players) do
-        if playerId ~= source and playerId ~= targetSource then
-            TriggerClientEvent('ox_lib:notify', playerId, {
-                title = '⚔️ Élimination',
-                description = killerName .. ' → ' .. victimName,
-                type = 'inform',
-                duration = 2000
-            })
-        end
-    end
-    
-    -- ========================================================================
-    -- VÉRIFIER LA PROGRESSION
-    -- ========================================================================
-    
-    if weaponKills >= killsRequired then
-        print(string.format("^2[GunGame Kill]^7 ✅ Seuil atteint: %d/%d", weaponKills, killsRequired))
+    -- Vérifier progression
+    if playerData[source].weaponKills >= killsRequired then
+        print("^2[GunGame Kill]^7 🎯 Seuil atteint!")
         
-        -- DERNIÈRE ARME = VICTOIRE
         if currentWeaponIndex >= weaponsCount then
-            print(string.format("^2[GunGame Kill]^7 🏆 VICTOIRE: %s", killerName))
+            print("^2[GunGame Kill]^7 🏆 VICTOIRE!")
             winnerDetected(source, instanceId)
         else
-            -- PASSER À L'ARME SUIVANTE
-            print(string.format("^2[GunGame Kill]^7 ⬆️ Passage arme %d → %d", 
+            print(string.format("^2[GunGame Kill]^7 ⬆️ Passage arme %d -> %d", 
                 currentWeaponIndex, currentWeaponIndex + 1))
             advancePlayerWeapon(source, instanceId, currentWeaponIndex + 1)
         end
-    else
-        local remaining = killsRequired - weaponKills
-        print(string.format("^3[GunGame Kill]^7 ⏳ Encore %d kill(s) nécessaire(s)", remaining))
-        
-        if currentWeaponIndex == weaponsCount then
-            TriggerClientEvent('ox_lib:notify', source, {
-                title = '🏆 DERNIÈRE ARME',
-                description = string.format('%d kill(s) pour GAGNER !', remaining),
-                type = 'warning',
-                duration = 3000
-            })
-        end
     end
+    
+    -- Mettre à jour le leaderboard
+    updateInstanceLeaderboard(instanceId)
     
     print("^3[GunGame Kill]^7 ========================================")
 end)
@@ -1103,6 +1061,39 @@ if Config.Debug then
             end
         end
     end, true)
+
+    RegisterCommand('gg_forcekill', function(source, args, rawCommand)
+    if source == 0 then return end
+    
+    if not playerData[source] then
+        print("^1[GunGame]^7 Joueur pas en jeu")
+        return
+    end
+    
+    print("^2[GunGame Test]^7 Simulation d'un kill pour le joueur " .. source)
+    TriggerEvent('gungame:botKill', source)
+end, false)
+
+    RegisterCommand('gg_mydata', function(source, args, rawCommand)
+        if source == 0 then return end
+        
+        if playerData[source] then
+            TriggerClientEvent('chat:addMessage', source, {
+                args = {
+                    "GunGame Debug",
+                    string.format("Arme: %d/%d | Kills: %d | Total: %d",
+                        playerData[source].currentWeapon or 0,
+                        #Config.Weapons,
+                        playerData[source].weaponKills or 0,
+                        playerData[source].totalKills or 0)
+                }
+            })
+        else
+            TriggerClientEvent('chat:addMessage', source, {
+                args = {"GunGame Debug", "Vous n'êtes pas en jeu"}
+            })
+        end
+    end, false)
 end
 
 -- ============================================================================
