@@ -671,6 +671,7 @@ function winnerDetected(source, instanceId)
     end
     
     resetInstance(instanceId)
+    TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
     
     if Config.MapRotation.enabled and Config.MapRotation.rotateOnVictory then
         local mapId = instance.map
@@ -782,8 +783,8 @@ function removePlayerFromInstance(source, instanceId)
     
     instance.currentPlayers = math.max(0, (instance.currentPlayers or 1) - 1)
     
-    -- ✅ NOUVEAU: REMETTRE LE JOUEUR DANS LE MONDE NORMAL
     RoutingBucketManager.ReturnPlayerToWorld(source)
+    Wait(300)
     
     if playerInventories[source] then
         restorePlayerInventory(source, playerInventories[source])
