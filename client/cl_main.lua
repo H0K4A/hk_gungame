@@ -791,10 +791,6 @@ RegisterNetEvent('gungame:teleportBeforeRevive')
 AddEventHandler('gungame:teleportBeforeRevive', function(spawn)
     local ped = PlayerPedId()
     
-    -- Option A : Téléportation brutale sans écran noir
-    -- Désactiver temporairement le rendu pour éviter les glitches visuels
-    DoScreenFadeOut(0) -- Fade out instantané (0ms)
-    
     SetEntityCoords(ped, spawn.x, spawn.y, spawn.z, false, false, false, false)
     SetEntityHeading(ped, spawn.heading)
     
@@ -1116,14 +1112,12 @@ CreateThread(function()
     local cfg = Config.GunGamePed
     if not cfg.enabled then return end
 
-    -- Load ped model
     local pedHash = GetHashKey(cfg.model)
     RequestModel(pedHash)
     while not HasModelLoaded(pedHash) do
         Wait(10)
     end
 
-    -- Spawn ped
     local ped = CreatePed(4, pedHash, cfg.coords.x, cfg.coords.y, cfg.coords.z - 1.0, cfg.coords.w, false, true)
 
     Wait(1000)
@@ -1132,19 +1126,22 @@ CreateThread(function()
     if cfg.invincible then SetEntityInvincible(ped, true) end
     if cfg.blockEvents then SetBlockingOfNonTemporaryEvents(ped, true) end
 
-    -- Interaction loop
     while true do
         local wait = 1000
         local player = PlayerPedId()
         local pCoords = GetEntityCoords(player)
         local dist = #(pCoords - vector3(cfg.coords.x, cfg.coords.y, cfg.coords.z))
 
-        if dist < cfg.interaction.distance then
+        if dist < 20.0 then
             wait = 0
-            DrawText3D(cfg.coords.x, cfg.coords.y, cfg.coords.z + 1.0, "~y~[E]~s~ " .. (cfg.text or ""))
-
-            if IsControlJustReleased(0, 38) then -- 38 = E
-                TriggerEvent('gungame:openMenu')
+            
+            -- Nito
+            DrawText3D(cfg.coords.x, cfg.coords.y, cfg.coords.z + 1.2, cfg.text or "")
+            
+            if dist < 2.5 then 
+               if IsControlJustReleased(0, 38) then
+                    TriggerEvent('gungame:openMenu')
+                end
             end
         end
 
@@ -1319,6 +1316,19 @@ Citizen.CreateThread(function()
                     )
                 end
             end
+        else
+            Wait(500)
+        end
+    end
+end)
+
+-- Thread pour afficher le HUD
+Citizen.CreateThread(function()
+    while true do
+        Wait(0)
+        
+        if playerData.inGame then
+            drawGunGameHUD()
         else
             Wait(500)
         end

@@ -9,7 +9,7 @@ Config.Debug = false
 Config.GunGamePed = {
     enabled = true,
     model = "s_m_y_blackops_01", -- Modèle du PED
-    coords = vector4(1355.340698, -564.026368, 74.285766, 178.582688), -- Position + heading
+    coords = vector4(1360.720826, -592.021972, 74.201416, 342.992126), -- Position + heading
     
     -- Interaction
     interaction = {
@@ -23,7 +23,7 @@ Config.GunGamePed = {
     invincible = true,
     frozen = true,
     blockEvents = true,
-    text = "GunGame"
+    text = "🔫 GunGame"
 }
 
 -- ============================================================================

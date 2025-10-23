@@ -1,7 +1,6 @@
 local ESX = exports["es_extended"]:getSharedObject()
 
 local playerData = {}
-local playerInventories = {}
 
 
 
@@ -35,10 +34,20 @@ AddEventHandler('playerDropped', function(reason)
         
         playerData[source] = nil
     end
+end)
+
+RegisterNetEvent('gungame:clearPlayerInventory')
+AddEventHandler('gungame:clearPlayerInventory', function()
+    local source = source
     
-    if playerInventories[source] then
-        playerInventories[source] = nil
-    end
+    exports.ox_inventory:ClearInventory(source)
+    
+    TriggerClientEvent('ox_lib:notify', source, {
+        title = '✅ Inventaire vidé',
+        description = 'Vous pouvez maintenant rejoindre le GunGame',
+        type = 'success',
+        duration = 3000
+    })
 end)
 
 -- REJOINDRE UNE INSTANCE
@@ -78,6 +87,58 @@ AddEventHandler('gungame:joinGame', function(a, b)
         end
     end
     
+    -- ✅ NOUVEAU: VÉRIFICATION INVENTAIRE VIDE
+    local allItems = exports.ox_inventory:GetInventoryItems(src)
+    local hasItems = false
+    local itemCount = 0
+    
+    if allItems then
+        for _, item in ipairs(allItems) do
+            if item and item.count and item.count > 0 then
+                hasItems = true
+                itemCount = itemCount + item.count
+            end
+        end
+    end
+    
+    if hasItems then
+        TriggerClientEvent('ox_lib:notify', src, {
+            title = '⚠️ Inventaire non vide',
+            description = string.format('Vous devez vider votre inventaire avant de jouer (%d objet(s))', itemCount),
+            type = 'error',
+            duration = 5000
+        })
+        
+        if Config.Debug then
+            print(string.format("^3[GunGame]^7 %s refusé: inventaire non vide (%d objets)", 
+                xPlayer.getName(), itemCount))
+        end
+        
+        return
+    end
+    
+    -- ✅ DOUBLE VÉRIFICATION: Poids de l'inventaire
+    local inventory = exports.ox_inventory:GetInventory(src)
+    
+    if inventory and inventory.weight and inventory.weight > 0 then
+        TriggerClientEvent('ox_lib:notify', src, {
+            title = '⚠️ Inventaire non vide',
+            description = string.format('Votre inventaire pèse %.2f kg. Videz-le complètement.', inventory.weight / 1000),
+            type = 'error',
+            duration = 5000
+        })
+        
+        if Config.Debug then
+            print(string.format("^3[GunGame]^7 %s refusé: poids inventaire = %.2f g", 
+                xPlayer.getName(), inventory.weight))
+        end
+        
+        return
+    end
+    
+    -- ✅ VÉRIFICATION OK, CONTINUER
+    print(string.format("^2[GunGame]^7 ✅ %s rejoint le GunGame (inventaire vide)", xPlayer.getName()))
+    
     local instance = InstanceManager.FindOrCreateInstance(mapId)
     
     if not instance then
@@ -98,7 +159,10 @@ AddEventHandler('gungame:joinGame', function(a, b)
         return
     end
     
-    savePlayerInventory(src)
+    -- ✅ PLUS BESOIN DE SAUVEGARDER L'INVENTAIRE (il est vide)
+    -- savePlayerInventory(src) -- ❌ SUPPRIMER CETTE LIGNE
+    
+    -- Nettoyer l'inventaire par sécurité
     exports.ox_inventory:ClearInventory(src)
     Wait(300)
     
@@ -123,7 +187,7 @@ AddEventHandler('gungame:joinGame', function(a, b)
         weaponKills = 0,
         totalKills = 0,
         playerName = xPlayer.getName(),
-        inGame = true  -- ← IMPORTANT: marquer comme en jeu
+        inGame = true
     }
     
     table.insert(instance.players, src)
@@ -141,7 +205,6 @@ AddEventHandler('gungame:joinGame', function(a, b)
         return
     end
     
-    -- ✅ ATTENDRE UN PEU AVANT LA TÉLÉPORTATION
     Wait(500)
     
     TriggerClientEvent('gungame:teleportToGame', src, instance.id, mapId, spawn)
@@ -420,17 +483,17 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     TriggerClientEvent('gungame:resetWeaponKills', source)
     TriggerClientEvent('gungame:syncWeaponKills', source, 0)
     
-    -- RETIRER ANCIENNE ARME
+    -- ✅ NETTOYER COMPLÈTEMENT L'INVENTAIRE
     TriggerClientEvent('gungame:clearAllInventory', source)
     
-    local currentWeapon = Config.Weapons[nextWeaponIndex - 1]
-    if currentWeapon then
-        exports.ox_inventory:RemoveItem(source, currentWeapon:lower(), 1)
+    -- ✅ RETIRER TOUTES LES ARMES GUNGAME DE L'INVENTAIRE
+    for _, gunGameWeapon in ipairs(Config.Weapons) do
+        exports.ox_inventory:RemoveItem(source, gunGameWeapon:lower(), 1)
     end
     
     Wait(500)
     
-    -- DONNER NOUVELLE ARME
+    -- ✅ DONNER LA NOUVELLE ARME (100% durabilité + munitions pleines)
     giveWeaponToPlayer(source, nextWeapon, instanceId, false)
     
     -- NOTIFICATIONS
@@ -446,7 +509,7 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     else
         TriggerClientEvent('ox_lib:notify', source, {
             title = '⬆️ Arme suivante',
-            description = string.format('%s (%d/%d)', 
+            description = string.format('%s (%d/%d) - Fraîche et rechargée !', 
                 nextWeapon:gsub("WEAPON_", ""), 
                 nextWeaponIndex, 
                 weaponsCount),
@@ -455,7 +518,7 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
         })
     end
     
-    -- BROADCAST À TOUS LES JOUEURS DE L'INSTANCE
+    -- BROADCAST
     local instance = InstanceManager.GetInstance(instanceId)
     if instance and instance.players then
         for _, playerId in ipairs(instance.players) do
@@ -486,16 +549,41 @@ function respawnPlayerInInstance(source, instanceId)
     
     if not spawn then return end
     
+    -- ✅ NOUVEAU: Récupérer l'arme actuelle du joueur
+    local currentWeaponIndex = playerData[source].currentWeapon or 1
+    local currentWeapon = Config.Weapons[currentWeaponIndex]
+    
+    -- Téléportation
     TriggerClientEvent('gungame:teleportBeforeRevive', source, spawn)
     TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
     TriggerClientEvent('gungame:activateGodMode', source)
     
+    -- ✅ NOUVEAU: Attendre que le joueur soit bien respawn avant de donner l'arme
+    SetTimeout(500, function()
+        if playerData[source] and playerData[source].instanceId == instanceId then
+            -- Nettoyer l'inventaire des armes GunGame
+            TriggerClientEvent('gungame:clearAllInventory', source)
+            
+            -- Retirer l'ancienne arme de l'inventaire
+            if currentWeapon then
+                exports.ox_inventory:RemoveItem(source, currentWeapon:lower(), 1)
+            end
+            
+            Wait(300)
+            
+            -- Redonner l'arme avec munitions et durabilité pleines
+            if currentWeapon then
+                giveWeaponToPlayer(source, currentWeapon, instanceId, false)
+            end
+        end
+    end)
+    
     updateInstancePlayerList(instanceId)
     
     TriggerClientEvent('ox_lib:notify', source, {
-        title = 'Respawn',
-        description = 'Vous avez respawné',
-        type = 'inform',
+        title = '♻️ Respawn',
+        description = 'Vous avez respawné avec vos munitions rechargées',
+        type = 'success',
         duration = 2000
     })
 
@@ -567,32 +655,55 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     local ammo = Config.WeaponAmmo[weapon] or 500
     local weaponName = weapon:lower()
     
-    -- Retirer l'arme si elle existe déjà
-    local hasWeapon = exports.ox_inventory:GetItem(source, weaponName, nil, false)
-    if hasWeapon and hasWeapon.count > 0 then
-        exports.ox_inventory:RemoveItem(source, weaponName, hasWeapon.count)
-        Wait(200)
+    -- ✅ AMÉLIORATION: Nettoyer complètement l'inventaire des armes GunGame
+    for _, gunGameWeapon in ipairs(Config.Weapons) do
+        local hasOldWeapon = exports.ox_inventory:GetItem(source, gunGameWeapon:lower(), nil, false)
+        if hasOldWeapon and hasOldWeapon.count > 0 then
+            exports.ox_inventory:RemoveItem(source, gunGameWeapon:lower(), hasOldWeapon.count)
+            if Config.Debug then
+                print(string.format("^3[GunGame]^7 Retrait de %s (x%d)", gunGameWeapon, hasOldWeapon.count))
+            end
+        end
     end
     
-    -- ✅ NOUVEAU: Donner l'arme avec durabilité 100 (max)
+    Wait(300)
+    
+    -- ✅ DONNER L'ARME AVEC DURABILITÉ 100 ET MUNITIONS PLEINES
     local success = exports.ox_inventory:AddItem(source, weaponName, 1, {
         ammo = ammo,
-        durability = 100  -- Durabilité au maximum
+        durability = 100  -- Durabilité maximale
     })
     
     if success then
         Wait(300)
         TriggerClientEvent('gungame:equipWeapon', source, weapon)
         
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = isFirstWeapon and '🎯 Arme de départ' or '🔫 Nouvelle arme',
-            description = weapon:gsub("WEAPON_", "") .. ' (' .. ammo .. ' munitions)',
-            type = 'success',
-            duration = 2500
-        })
+        local weaponLabel = weapon:gsub("WEAPON_", "")
+        
+        if isFirstWeapon then
+            TriggerClientEvent('ox_lib:notify', source, {
+                title = '🎯 Arme de départ',
+                description = string.format('%s - %d munitions', weaponLabel, ammo),
+                type = 'success',
+                duration = 3000
+            })
+        else
+            TriggerClientEvent('ox_lib:notify', source, {
+                title = '🔫 Arme rechargée',
+                description = string.format('%s - %d munitions (100%% durabilité)', weaponLabel, ammo),
+                type = 'success',
+                duration = 2500
+            })
+        end
+        
+        if Config.Debug then
+            print(string.format("^2[GunGame]^7 ✅ %s donné au joueur %d (%d munitions, 100%% durabilité)", 
+                weapon, source, ammo))
+        end
     else
         print("^1[GunGame]^7 ERREUR: Impossible d'ajouter l'arme " .. weapon .. " au joueur " .. source)
         
+        -- Retry après 500ms
         SetTimeout(500, function()
             if playerData[source] and playerData[source].instanceId == instanceId then
                 giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
@@ -600,40 +711,6 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
         end)
     end
 end
-
--- ============================================================================
--- THREAD: MAINTIEN DE LA DURABILITÉ INFINIE
--- ============================================================================
-
--- Thread qui vérifie et répare la durabilité toutes les 2 secondes
-Citizen.CreateThread(function()
-    while true do
-        Wait(2000) -- Vérification toutes les 2 secondes
-        
-        for source, data in pairs(playerData) do
-            if data.inGame and data.currentWeapon then
-                local weaponName = Config.Weapons[data.currentWeapon]
-                
-                if weaponName then
-                    local weaponItem = exports.ox_inventory:GetItem(source, weaponName:lower(), nil, false)
-                    
-                    -- Si l'arme existe et que sa durabilité est inférieure à 100
-                    if weaponItem and weaponItem.metadata and weaponItem.metadata.durability then
-                        if weaponItem.metadata.durability < 100 then
-                            -- Réparer la durabilité
-                            exports.ox_inventory:SetDurability(source, weaponItem.slot, 100)
-                            
-                            if Config.Debug then
-                                print(string.format("^3[GunGame]^7 Durabilité réparée: %s -> 100%% (Joueur %d)", 
-                                    weaponName, source))
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
 
 -- ============================================================================
 -- RETIRER UN JOUEUR DE L'INSTANCE
@@ -685,10 +762,14 @@ function removePlayerFromInstance(source, instanceId)
     RoutingBucketManager.ReturnPlayerToWorld(source)
     Wait(300)
     
-    if playerInventories[source] then
-        restorePlayerInventory(source, playerInventories[source])
-        playerInventories[source] = nil
-    end
+    -- ✅ NETTOYER L'INVENTAIRE (retirer les armes GunGame)
+    exports.ox_inventory:ClearInventory(source)
+    
+    -- ✅ PLUS BESOIN DE RESTAURER (l'inventaire était vide à l'entrée)
+    -- if playerInventories[source] then
+    --     restorePlayerInventory(source, playerInventories[source])
+    --     playerInventories[source] = nil
+    -- end
     
     playerData[source] = nil
     
@@ -699,7 +780,7 @@ function removePlayerFromInstance(source, instanceId)
     updateInstancePlayerList(instanceId)
     
     if Config.Debug then
-        print(string.format("^2[GunGame]^7 Joueur %d retiré de l'instance %d (retour bucket 0)", 
+        print(string.format("^2[GunGame]^7 Joueur %d retiré de l'instance %d (inventaire nettoyé)", 
             source, instanceId))
     end
 end
@@ -716,49 +797,6 @@ function resetInstance(instanceId)
     instance.currentPlayers = 0
     
     SpawnSystem.ResetInstance(instanceId)
-end
-
--- GESTION DE L'INVENTAIRE
-
-function savePlayerInventory(source)
-    local allItems = exports.ox_inventory:GetInventoryItems(source)
-    local itemsToSave = {}
-    
-    local gungameWeapons = {}
-    for _, weapon in ipairs(Config.Weapons) do
-        gungameWeapons[weapon:lower()] = true
-    end
-    
-    if allItems then
-        for _, item in ipairs(allItems) do
-            if not gungameWeapons[item.name:lower()] then
-                table.insert(itemsToSave, {
-                    name = item.name,
-                    count = item.count,
-                    metadata = item.metadata
-                })
-            end
-        end
-    end
-    
-    playerInventories[source] = { items = itemsToSave }
-end
-
-function restorePlayerInventory(source, inventory)
-    if not inventory then return end
-    
-    local xPlayer = ESX.GetPlayerFromId(source)
-    if not xPlayer then return end
-    
-    exports.ox_inventory:ClearInventory(source)
-    
-    SetTimeout(500, function()
-        if inventory.items then
-            for _, item in ipairs(inventory.items) do
-                exports.ox_inventory:AddItem(source, item.name, item.count, item.metadata)
-            end
-        end
-    end)
 end
 
 -- MISE À JOUR DE LA LISTE DES JOUEURS
