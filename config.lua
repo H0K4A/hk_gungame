@@ -27,29 +27,6 @@ Config.GunGamePed = {
 }
 
 -- ============================================================================
--- CONFIGURATION DU PED GUNGAME
--- ============================================================================
-Config.GunGamePed = {
-    enabled = true,
-    model = "s_m_y_ammucity_01", -- Modèle du PED (vendeur d'armes)
-    coords = vector4(810.23, -2157.88, 29.62, 180.0), -- Position + heading
-    scenario = "WORLD_HUMAN_CLIPBOARD", -- Animation du PED
-    
-    -- Interaction
-    interaction = {
-        distance = 2.5, -- Distance d'interaction
-        key = "E", -- Touche par défaut (ox_target si activé)
-        label = "🔫 Ouvrir le menu GunGame",
-        icon = "fa-solid fa-gamepad"
-    },
-    
-    -- Protection du PED
-    invincible = true,
-    frozen = true,
-    blockEvents = true
-}
-
--- ============================================================================
 -- SYSTÈME DE ROTATION DES MAPS - NOUVEAU SYSTÈME 2 MAPS
 -- ============================================================================
 Config.MapRotation = {
