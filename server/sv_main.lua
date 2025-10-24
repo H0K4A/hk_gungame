@@ -1,6 +1,8 @@
 local ESX = exports["es_extended"]:getSharedObject()
 
 local playerData = {}
+local recentServerKills = {}
+local playersInGunGame = {}
 
 
 
@@ -17,22 +19,56 @@ local playerData = {}
 AddEventHandler('playerDropped', function(reason)
     local source = source
     
-    -- ✅ NOUVEAU: NETTOYER LE ROUTING BUCKET
-    RoutingBucketManager.ReturnPlayerToWorld(source)
+    print(string.format("^3[GunGame]^7 Joueur %d déconnecté: %s", source, reason))
     
-    if playerData[source] then
-        local instanceId = playerData[source].instanceId
+    -- ✅ SI LE JOUEUR ÉTAIT EN GUNGAME
+    if playersInGunGame[source] then
+        print(string.format("^1[GunGame Crash]^7 Joueur %d était en GunGame, nettoyage forcé", source))
         
-        if SpawnSystem then
-            SpawnSystem.FreeSpawn(instanceId, source)
+        -- Nettoyer inventaire
+        cleanupPlayerInventory(source)
+        
+        -- Nettoyer routing bucket
+        RoutingBucketManager.ReturnPlayerToWorld(source)
+        
+        -- Nettoyer playerData
+        if playerData[source] then
+            local instanceId = playerData[source].instanceId
+            
+            if SpawnSystem then
+                SpawnSystem.FreeSpawn(instanceId, source)
+            end
+            
+            local instance = InstanceManager.GetInstance(instanceId)
+            if instance then
+                -- Retirer de la liste des joueurs
+                if instance.players then
+                    for i, playerId in ipairs(instance.players) do
+                        if playerId == source then
+                            table.remove(instance.players, i)
+                            break
+                        end
+                    end
+                end
+                
+                if instance.playersData then
+                    instance.playersData[source] = nil
+                end
+                
+                instance.currentPlayers = math.max(0, (instance.currentPlayers or 1) - 1)
+                
+                if instance.currentPlayers == 0 then
+                    resetInstance(instanceId)
+                else
+                    updateInstancePlayerList(instanceId)
+                end
+            end
+            
+            playerData[source] = nil
         end
         
-        local instance = InstanceManager.GetInstance(instanceId)
-        if instance then
-            removePlayerFromInstance(source, instanceId)
-        end
-        
-        playerData[source] = nil
+        -- Retirer du tracker
+        playersInGunGame[source] = nil
     end
 end)
 
@@ -66,6 +102,11 @@ AddEventHandler('gungame:joinGame', function(a, b)
     local xPlayer = ESX.GetPlayerFromId(src)
     
     if not xPlayer then return end
+
+    playersInGunGame[src] = {
+        identifier = xPlayer.identifier,
+        joinTime = os.time()
+    }
     
     if not Config.Maps[mapId] then
         TriggerClientEvent('ox_lib:notify', src, {
@@ -352,6 +393,162 @@ AddEventHandler('gungame:registerKill', function(targetSource)
     updateInstanceLeaderboard(instanceId)
 end)
 
+RegisterNetEvent('gungame:registerKill')
+AddEventHandler('gungame:registerKill', function(targetSource, isBot)
+    local source = source
+    
+    -- ✅ ÉTAPE 1 : VÉRIFICATIONS DE BASE
+    
+    if not playerData[source] then
+        print("^1[GunGame Kill]^7 ❌ Tueur introuvable dans playerData")
+        return
+    end
+    
+    local instanceId = playerData[source].instanceId
+    
+    if not instanceId then
+        print("^1[GunGame Kill]^7 ❌ Pas d'instance pour le tueur")
+        return
+    end
+    
+    local instance = InstanceManager.GetInstance(instanceId)
+    
+    if not instance then
+        print("^1[GunGame Kill]^7 ❌ Instance introuvable")
+        return
+    end
+    
+    if not instance.gameActive then
+        print("^1[GunGame Kill]^7 ❌ Partie inactive")
+        return
+    end
+    
+    -- ✅ ÉTAPE 2 : VÉRIFIER LA VICTIME (SI JOUEUR)
+    
+    if targetSource and not isBot then
+        targetSource = tonumber(targetSource)
+        
+        if not targetSource or targetSource == source then
+            print("^1[GunGame Kill]^7 ❌ Cible invalide ou suicide")
+            return
+        end
+        
+        if not playerData[targetSource] then
+            print("^1[GunGame Kill]^7 ❌ Victime introuvable dans playerData")
+            return
+        end
+        
+        if playerData[targetSource].instanceId ~= instanceId then
+            print("^1[GunGame Kill]^7 ❌ Instances différentes (tueur: " .. instanceId .. ", victime: " .. playerData[targetSource].instanceId .. ")")
+            return
+        end
+        
+        -- ✅ VÉRIFIER LES ROUTING BUCKETS
+        if not RoutingBucketManager.ArePlayersInSameBucket(source, targetSource) then
+            print("^1[GunGame Kill]^7 ❌ Routing buckets différents")
+            return
+        end
+    end
+    
+    -- ✅ ÉTAPE 3 : ANTI-DOUBLON SERVEUR
+    
+    local killKey = string.format("%d_%s_%d", source, tostring(targetSource or "bot"), os.time())
+    local simpleKey = string.format("%d_%s", source, tostring(targetSource or "bot"))
+    
+    if recentServerKills[simpleKey] then
+        local timeSinceKill = os.time() - recentServerKills[simpleKey]
+        if timeSinceKill < 2 then
+            print("^3[GunGame Kill]^7 ⚠️ Kill doublon détecté côté serveur (ignoré)")
+            return
+        end
+    end
+    
+    -- Enregistrer ce kill
+    recentServerKills[simpleKey] = os.time()
+    
+    -- ✅ ÉTAPE 4 : RÉCUPÉRER LES DONNÉES ACTUELLES
+    
+    local currentWeaponIndex = playerData[source].currentWeapon or 1
+    local weaponKills = playerData[source].weaponKills or 0
+    local totalKills = playerData[source].totalKills or 0
+    local weaponsCount = #Config.Weapons
+    
+    -- ✅ ÉTAPE 5 : CALCULER LES KILLS REQUIS
+    
+    local killsRequired = currentWeaponIndex == weaponsCount 
+        and Config.GunGame.killsForLastWeapon 
+        or Config.GunGame.killsPerWeapon
+    
+    -- ✅ ÉTAPE 6 : INCRÉMENTER LES COMPTEURS
+    
+    weaponKills = weaponKills + 1
+    totalKills = totalKills + 1
+    
+    playerData[source].weaponKills = weaponKills
+    playerData[source].totalKills = totalKills
+    
+    -- Synchroniser avec le client
+    TriggerClientEvent('gungame:syncWeaponKills', source, weaponKills)
+    
+    -- ✅ ÉTAPE 7 : NOTIFICATIONS
+    
+    local xPlayer = ESX.GetPlayerFromId(source)
+    local killerName = xPlayer and xPlayer.getName() or "Joueur"
+    
+    local victimName = "Bot"
+    if targetSource and not isBot then
+        local xVictim = ESX.GetPlayerFromId(targetSource)
+        victimName = xVictim and xVictim.getName() or "Joueur"
+    end
+    
+    -- Notification au tueur
+    TriggerClientEvent('ox_lib:notify', source, {
+        title = '💀 KILL !',
+        description = string.format('%s (%d/%d)', victimName, weaponKills, killsRequired),
+        type = 'success',
+        duration = 3000
+    })
+    
+    -- Notification à la victime
+    if targetSource and not isBot then
+        TriggerClientEvent('ox_lib:notify', targetSource, {
+            title = '☠️ Éliminé',
+            description = 'Par ' .. killerName,
+            type = 'error',
+            duration = 2000
+        })
+    end
+    
+    -- ✅ LOG DEBUG
+    if Config.Debug then
+        print(string.format("^2[GunGame Kill]^7 ✅ %s a tué %s (%d/%d kills)", 
+            killerName, victimName, weaponKills, killsRequired))
+    end
+    
+    -- ✅ ÉTAPE 8 : VÉRIFIER SI ON CHANGE D'ARME
+    
+    if weaponKills >= killsRequired then
+        
+        -- 🏆 VICTOIRE (dernière arme + kills requis atteints)
+        if currentWeaponIndex >= weaponsCount then
+            print(string.format("^2[GunGame]^7 🏆 %s a gagné !", killerName))
+            winnerDetected(source, instanceId)
+        else
+            -- ⬆️ PASSAGE À L'ARME SUIVANTE
+            local nextWeaponIndex = currentWeaponIndex + 1
+            
+            print(string.format("^2[GunGame]^7 ⬆️ %s passe à l'arme %d/%d", 
+                killerName, nextWeaponIndex, weaponsCount))
+            
+            advancePlayerWeapon(source, instanceId, nextWeaponIndex)
+        end
+    end
+    
+    -- ✅ ÉTAPE 9 : METTRE À JOUR LE LEADERBOARD
+    
+    updateInstanceLeaderboard(instanceId)
+end)
+
 -- GESTION DES MORTS
 
 RegisterNetEvent('gungame:playerDeath')
@@ -431,13 +628,6 @@ AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
         -- ✅ NOUVEAU: REMETTRE DANS LE MONDE NORMAL
         RoutingBucketManager.ReturnPlayerToWorld(source)
         
-        if playerInventories[source] then
-            SetTimeout(500, function()
-                restorePlayerInventory(source, playerInventories[source])
-                playerInventories[source] = nil
-            end)
-        end
-        
         TriggerClientEvent('ox_lib:notify', source, {
             title = '🔄 Changement de Map',
             description = 'La map va changer, retour au lobby',
@@ -452,6 +642,29 @@ AddEventHandler('gungame:rotationForcedQuit', function(targetSource)
                 removePlayerFromInstance(source, instanceId)
             end
         end)
+    end
+end)
+
+RegisterNetEvent('gungame:requestCurrentWeapon')
+AddEventHandler('gungame:requestCurrentWeapon', function()
+    local source = source
+    
+    if not playerData[source] or not playerData[source].inGame then return end
+    
+    local instanceId = playerData[source].instanceId
+    local currentWeaponIndex = playerData[source].currentWeapon or 1
+    local currentWeapon = Config.Weapons[currentWeaponIndex]
+    
+    if currentWeapon then
+        print(string.format("^3[GunGame]^7 Renvoi arme à joueur %d: %s", source, currentWeapon))
+        
+        -- Nettoyer et redonner
+        TriggerClientEvent('gungame:clearAllInventory', source)
+        exports.ox_inventory:ClearInventory(source)
+        
+        Wait(300)
+        
+        giveWeaponToPlayer(source, currentWeapon, instanceId, false)
     end
 end)
 
@@ -471,98 +684,75 @@ end)
 -- FONCTION AVANCER À L'ARME SUIVANTE - VERSION AMÉLIORÉE
 -- ============================================================================
 
-function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
+AddEventHandler('playerDropped', function(reason)
+    local source = source
     
-    if not playerData[source] then
-        print("^1[DEBUG WEAPON]^7 ❌ playerData[source] est nil")
-        return
+    print(string.format("^3[GunGame]^7 Joueur %d déconnecté: %s", source, reason))
+    
+    -- ✅ NETTOYER L'INVENTAIRE IMMÉDIATEMENT
+    if playerData[source] then
+        -- Retirer toutes les armes GunGame
+        for _, weapon in ipairs(Config.Weapons) do
+            pcall(function()
+                exports.ox_inventory:RemoveItem(source, weapon:lower(), 999)
+            end)
+        end
+        
+        -- Nettoyer l'inventaire complet
+        pcall(function()
+            exports.ox_inventory:ClearInventory(source)
+        end)
     end
     
-    if not InstanceManager.GetInstance(instanceId) then
-        print("^1[DEBUG WEAPON]^7 ❌ Instance introuvable")
-        return
+    -- ✅ NETTOYER LE ROUTING BUCKET
+    RoutingBucketManager.ReturnPlayerToWorld(source)
+    
+    if playerData[source] then
+        local instanceId = playerData[source].instanceId
+        
+        if SpawnSystem then
+            SpawnSystem.FreeSpawn(instanceId, source)
+        end
+        
+        local instance = InstanceManager.GetInstance(instanceId)
+        if instance then
+            removePlayerFromInstance(source, instanceId)
+        end
+        
+        playerData[source] = nil
     end
+end)
+
+AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
+    deferrals.defer()
     
-    local xPlayer = ESX.GetPlayerFromId(source)
-    if not xPlayer then 
-        print("^1[DEBUG WEAPON]^7 ❌ xPlayer introuvable")
-        return
-    end
+    local source = source
+    local identifiers = GetPlayerIdentifiers(source)
+    local identifier = nil
     
-    local playerName = xPlayer.getName()
-    local weaponsCount = #Config.Weapons
-    local nextWeapon = Config.Weapons[nextWeaponIndex]
-    
-    -- ÉTAPE 1 : SAUVEGARDER LA NOUVELLE ARME
-    local oldWeapon = playerData[source].currentWeapon
-    local oldKills = playerData[source].weaponKills
-    
-    playerData[source].currentWeapon = nextWeaponIndex
-    playerData[source].weaponKills = 0
-    
-    -- ÉTAPE 2 : SYNCHRONISER AVEC LE CLIENT
-    TriggerClientEvent('gungame:updateWeaponIndex', source, nextWeaponIndex)
-    
-    TriggerClientEvent('gungame:resetWeaponKills', source)
-    
-    TriggerClientEvent('gungame:syncWeaponKills', source, 0)
-    
-    -- ÉTAPE 3 : NETTOYER L'INVENTAIRE
-    TriggerClientEvent('gungame:clearAllInventory', source)
-    
-    -- Retirer toutes les armes GunGame de l'inventaire
-    for i, gunGameWeapon in ipairs(Config.Weapons) do
-        local itemCount = exports.ox_inventory:GetItemCount(source, gunGameWeapon:lower())
-        if itemCount and itemCount > 0 then
-            exports.ox_inventory:RemoveItem(source, gunGameWeapon:lower(), itemCount)
+    for _, id in ipairs(identifiers) do
+        if string.match(id, "license:") then
+            identifier = id
+            break
         end
     end
-    Wait(500)
     
-    -- ÉTAPE 4 : DONNER LA NOUVELLE ARME
-    giveWeaponToPlayer(source, nextWeapon, instanceId, false)
-    
-    -- ÉTAPE 5 : NOTIFICATIONS
-    if nextWeaponIndex == weaponsCount then
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '🏆 DERNIÈRE ARME !',
-            description = string.format('%s - %d kill(s) pour gagner !', 
-                nextWeapon:gsub("WEAPON_", ""), 
-                Config.GunGame.killsForLastWeapon),
-            type = 'warning',
-            duration = 5000
-        })
-    else
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = '⬆️ Arme suivante',
-            description = string.format('%s (%d/%d)', 
-                nextWeapon:gsub("WEAPON_", ""), 
-                nextWeaponIndex, 
-                weaponsCount),
-            type = 'success',
-            duration = 3000
-        })
-    end
-    
-    -- ÉTAPE 6 : BROADCAST AUX AUTRES JOUEURS
-    local instance = InstanceManager.GetInstance(instanceId)
-    if instance and instance.players then
-        for _, playerId in ipairs(instance.players) do
-            if playerId ~= source then
-                TriggerClientEvent('ox_lib:notify', playerId, {
-                    title = '📢 Info',
-                    description = string.format('%s est passé à l\'arme %d/%d', 
-                        playerName, nextWeaponIndex, weaponsCount),
-                    type = 'inform',
-                    duration = 2000
-                })
+    if identifier then
+        -- Vérifier si ce joueur était en GunGame avant de crash
+        for playerId, data in pairs(playersInGunGame) do
+            if data.identifier == identifier then
+                print(string.format("^3[GunGame Reconnect]^7 Joueur %s se reconnecte après crash", name))
+                
+                -- Nettoyer les anciennes données
+                playersInGunGame[playerId] = nil
+                
+                break
             end
         end
     end
     
-    -- ÉTAPE 7 : MISE À JOUR DU LEADERBOARD
-    updateInstanceLeaderboard(instanceId)
-end
+    deferrals.done()
+end)
 
 -- RESPAWN DU JOUEUR
 
@@ -576,45 +766,50 @@ function respawnPlayerInInstance(source, instanceId)
     
     if not spawn then return end
     
-    -- ✅ NOUVEAU: Récupérer l'arme actuelle du joueur
+    -- ✅ Récupérer l'arme actuelle
     local currentWeaponIndex = playerData[source].currentWeapon or 1
     local currentWeapon = Config.Weapons[currentWeaponIndex]
     
-    -- Téléportation
+    if Config.Debug then
+        print(string.format("^5[GunGame Respawn]^7 Joueur %d - Arme %d: %s", 
+            source, currentWeaponIndex, currentWeapon))
+    end
+    
+    -- ✅ Nettoyer d'abord
+    TriggerClientEvent('gungame:clearAllInventory', source)
+    exports.ox_inventory:ClearInventory(source)
+    
+    Wait(200)
+    
+    -- ✅ Téléporter
     TriggerClientEvent('gungame:teleportBeforeRevive', source, spawn)
+    
+    Wait(300)
+    
+    -- ✅ Revive
     TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
+    
+    Wait(500)
+    
+    -- ✅ GodMode
     TriggerClientEvent('gungame:activateGodMode', source)
     
-    -- ✅ NOUVEAU: Attendre que le joueur soit bien respawn avant de donner l'arme
-    SetTimeout(500, function()
-        if playerData[source] and playerData[source].instanceId == instanceId then
-            -- Nettoyer l'inventaire des armes GunGame
-            TriggerClientEvent('gungame:clearAllInventory', source)
-            
-            -- Retirer l'ancienne arme de l'inventaire
-            if currentWeapon then
-                exports.ox_inventory:RemoveItem(source, currentWeapon:lower(), 1)
-            end
-            
-            Wait(300)
-            
-            -- Redonner l'arme avec munitions et durabilité pleines
-            if currentWeapon then
-                giveWeaponToPlayer(source, currentWeapon, instanceId, false)
-            end
-        end
-    end)
+    Wait(300)
+    
+    -- ✅ Redonner l'arme
+    if currentWeapon and playerData[source] and playerData[source].instanceId == instanceId then
+        giveWeaponToPlayer(source, currentWeapon, instanceId, false)
+    end
     
     updateInstancePlayerList(instanceId)
+    updateInstanceLeaderboard(instanceId)
     
     TriggerClientEvent('ox_lib:notify', source, {
         title = '♻️ Respawn',
-        description = 'Vous avez respawné avec vos munitions rechargées',
+        description = 'Vous avez respawné',
         type = 'success',
         duration = 2000
     })
-
-    updateInstanceLeaderboard(instanceId)
 end
 
 -- GAGNANT
@@ -623,7 +818,7 @@ function winnerDetected(source, instanceId)
     local instance = InstanceManager.GetInstance(instanceId)
     local xPlayer = ESX.GetPlayerFromId(source)
     
-    if not xPlayer then return end
+    if not xPlayer or not instance then return end
     
     instance.gameActive = false
     
@@ -632,31 +827,80 @@ function winnerDetected(source, instanceId)
     
     print("^2[GunGame]^7 🏆 Gagnant: " .. xPlayer.getName())
     
+    local playersList = {}
     for _, playerId in ipairs(instance.players) do
         if playerData[playerId] then
-            TriggerClientEvent('gungame:playerWon', playerId, xPlayer.getName(), reward)
-            SpawnSystem.FreeSpawn(instanceId, playerId)
-            
-            -- ✅ NOUVEAU: REMETTRE DANS LE MONDE NORMAL
-            RoutingBucketManager.ReturnPlayerToWorld(playerId)
-            
-            if playerInventories[playerId] then
-                SetTimeout(3500, function()
-                    restorePlayerInventory(playerId, playerInventories[playerId])
-                    playerInventories[playerId] = nil
-                end)
-            end
-            
-            playerData[playerId] = nil
+            table.insert(playersList, playerId)
         end
     end
     
-    resetInstance(instanceId)
-    TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
+    -- Broadcast victoire
+    for _, playerId in ipairs(playersList) do
+        TriggerClientEvent('gungame:playerWon', playerId, xPlayer.getName(), reward)
+    end
+    
+    -- ✅ NETTOYAGE FORCÉ AVEC LA NOUVELLE FONCTION
+    SetTimeout(500, function()
+        for _, playerId in ipairs(playersList) do
+            if playerData[playerId] then
+                SpawnSystem.FreeSpawn(instanceId, playerId)
+                
+                -- ✅ UTILISER LA FONCTION DE NETTOYAGE FORCÉ
+                forceCleanupPlayer(playerId)
+                
+                RoutingBucketManager.ReturnPlayerToWorld(playerId)
+                
+                playerData[playerId] = nil
+            end
+        end
+        
+        resetInstance(instanceId)
+    end)
+    
+    -- Heal + double vérification après 2 secondes
+    SetTimeout(1000, function()
+        TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
+        
+        -- ✅ DOUBLE VÉRIFICATION APRÈS 2 SECONDES
+        SetTimeout(1000, function()
+            for _, playerId in ipairs(playersList) do
+                forceCleanupPlayer(playerId)
+            end
+        end)
+    end)
     
     if Config.MapRotation.enabled and Config.MapRotation.rotateOnVictory then
         local mapId = instance.map
         MapRotation.OnVictory(mapId)
+    end
+end
+
+function forceCleanupPlayer(source)
+    if not source or source == 0 then return end
+    
+    -- 1. Nettoyer l'inventaire serveur
+    exports.ox_inventory:ClearInventory(source)
+    
+    -- 2. Retirer toutes les armes GunGame
+    for _, weapon in ipairs(Config.Weapons) do
+        local itemCount = exports.ox_inventory:GetItemCount(source, weapon:lower())
+        if itemCount and itemCount > 0 then
+            exports.ox_inventory:RemoveItem(source, weapon:lower(), itemCount)
+        end
+    end
+    
+    -- 3. Forcer le nettoyage côté client
+    TriggerClientEvent('gungame:clearAllInventory', source)
+    TriggerClientEvent('gungame:clearWeapons', source)
+    
+    -- 4. Attendre un peu puis vérifier à nouveau
+    SetTimeout(500, function()
+        exports.ox_inventory:ClearInventory(source)
+        TriggerClientEvent('gungame:clearWeapons', source)
+    end)
+    
+    if Config.Debug then
+        print(string.format("^2[GunGame]^7 Nettoyage forcé du joueur %d", source))
     end
 end
 
@@ -666,61 +910,49 @@ end
 
 function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     
-    if not source or not tonumber(source) then
-        return
-    end
+    if not source or not tonumber(source) then return end
     
     local xPlayer = ESX.GetPlayerFromId(source)
-    if not xPlayer then
-        return
-    end
+    if not xPlayer then return end
     
-    if not weapon then
-        return
-    end
+    if not weapon then return end
     
     local ammo = Config.WeaponAmmo[weapon] or 500
     local weaponName = weapon:lower()
     
-    for _, gunGameWeapon in ipairs(Config.Weapons) do
-        local hasOldWeapon = exports.ox_inventory:GetItem(source, gunGameWeapon:lower(), nil, false)
-        if hasOldWeapon and hasOldWeapon.count > 0 then
-            exports.ox_inventory:RemoveItem(source, gunGameWeapon:lower(), hasOldWeapon.count)
-        end
+    if Config.Debug then
+        print(string.format("^5[GunGame Weapon]^7 Donner %s à joueur %d", weapon, source))
     end
     
-    Wait(300)
+    -- ✅ Nettoyer les anciennes armes
+    for _, gunGameWeapon in ipairs(Config.Weapons) do
+        exports.ox_inventory:RemoveItem(source, gunGameWeapon:lower(), 999)
+    end
     
+    Wait(200)
+    
+    -- ✅ Ajouter l'arme
     local success = exports.ox_inventory:AddItem(source, weaponName, 1, {
         ammo = ammo,
         durability = 100
     })
     
     if success then
-        
         Wait(300)
         
+        -- ✅ Équiper l'arme
         TriggerClientEvent('gungame:equipWeapon', source, weapon)
         
+        -- ✅ Notification
         local weaponLabel = weapon:gsub("WEAPON_", "")
-        
-        if isFirstWeapon then
-            TriggerClientEvent('ox_lib:notify', source, {
-                title = '🎯 Arme de départ',
-                description = string.format('%s - %d munitions', weaponLabel, ammo),
-                type = 'success',
-                duration = 3000
-            })
-        else
-            TriggerClientEvent('ox_lib:notify', source, {
-                title = '🔫 Arme rechargée',
-                description = string.format('%s - %d munitions (100%% durabilité)', weaponLabel, ammo),
-                type = 'success',
-                duration = 2500
-            })
-        end
+        TriggerClientEvent('ox_lib:notify', source, {
+            title = isFirstWeapon and '🎯 Arme de départ' or '🔫 Nouvelle arme',
+            description = string.format('%s - %d munitions', weaponLabel, ammo),
+            type = 'success',
+            duration = 2500
+        })
     else
-        -- Retry après 500ms
+        -- Retry
         SetTimeout(500, function()
             if playerData[source] and playerData[source].instanceId == instanceId then
                 giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
@@ -743,10 +975,13 @@ AddEventHandler('gungame:leaveGame', function()
 end)
 
 function removePlayerFromInstance(source, instanceId)
-    if not source or not tonumber(source) then
-        print("^1[GunGame]^7 ERREUR: source invalide dans removePlayerFromInstance")
-        return
-    end
+    if not source or not tonumber(source) then return end
+    
+    -- ✅ NETTOYER L'INVENTAIRE
+    cleanupPlayerInventory(source)
+    
+    -- ✅ RETIRER DU TRACKER
+    playersInGunGame[source] = nil
     
     if not instanceId then
         print("^1[GunGame]^7 ERREUR: instanceId nil dans removePlayerFromInstance")
@@ -781,12 +1016,6 @@ function removePlayerFromInstance(source, instanceId)
     
     -- ✅ NETTOYER L'INVENTAIRE (retirer les armes GunGame)
     exports.ox_inventory:ClearInventory(source)
-    
-    -- ✅ PLUS BESOIN DE RESTAURER (l'inventaire était vide à l'entrée)
-    -- if playerInventories[source] then
-    --     restorePlayerInventory(source, playerInventories[source])
-    --     playerInventories[source] = nil
-    -- end
     
     playerData[source] = nil
     
@@ -917,6 +1146,30 @@ function ArePlayersInSameInstance(source1, source2)
     return instance1 == instance2 and RoutingBucketManager.ArePlayersInSameBucket(source1, source2)
 end
 
+function cleanupPlayerInventory(source)
+    if Config.Debug then
+        print(string.format("^3[GunGame Cleanup]^7 Nettoyage inventaire joueur %d", source))
+    end
+    
+    -- Retirer TOUTES les armes GunGame
+    for _, weapon in ipairs(Config.Weapons) do
+        pcall(function()
+            local count = exports.ox_inventory:GetItemCount(source, weapon:lower())
+            if count and count > 0 then
+                exports.ox_inventory:RemoveItem(source, weapon:lower(), count)
+                if Config.Debug then
+                    print(string.format("^3[GunGame Cleanup]^7 Retiré: %s x%d", weapon, count))
+                end
+            end
+        end)
+    end
+    
+    -- Clear complet
+    pcall(function()
+        exports.ox_inventory:ClearInventory(source)
+    end)
+end
+
 
 
 
@@ -929,12 +1182,10 @@ end
 
 
 
--- MAINTIEN DE LA DURABILITÉ INFINIE
-
 -- Thread qui vérifie et répare la durabilité toutes les 2 secondes
 Citizen.CreateThread(function()
     while true do
-        Wait(2000) -- Vérification toutes les 2 secondes
+        Wait(1000) -- Vérification toutes les 1 seconde
         
         for source, data in pairs(playerData) do
             if data.inGame and data.currentWeapon then
@@ -943,19 +1194,88 @@ Citizen.CreateThread(function()
                 if weaponName then
                     local weaponItem = exports.ox_inventory:GetItem(source, weaponName:lower(), nil, false)
                     
-                    -- Si l'arme existe et que sa durabilité est inférieure à 100
-                    if weaponItem and weaponItem.metadata and weaponItem.metadata.durability then
-                        if weaponItem.metadata.durability < 100 then
-                            -- Réparer la durabilité
-                            exports.ox_inventory:SetDurability(source, weaponItem.slot, 100)
+                    if weaponItem and weaponItem.metadata then
+                        local needsUpdate = false
+                        local newMetadata = {
+                            ammo = weaponItem.metadata.ammo or 500,
+                            durability = weaponItem.metadata.durability or 100
+                        }
+                        
+                        -- ✅ VÉRIFIER LA DURABILITÉ
+                        if weaponItem.metadata.durability and weaponItem.metadata.durability < 100 then
+                            newMetadata.durability = 100
+                            needsUpdate = true
                             
                             if Config.Debug then
-                                print(string.format("^3[GunGame]^7 Durabilité réparée: %s -> 100%% (Joueur %d)", 
-                                    weaponName, source))
+                                print(string.format("^3[GunGame Durability]^7 %s réparé: %d%% -> 100%% (Joueur %d)", 
+                                    weaponName, math.floor(weaponItem.metadata.durability), source))
                             end
+                        end
+                        
+                        -- ✅ VÉRIFIER LES MUNITIONS
+                        local expectedAmmo = Config.WeaponAmmo[weaponName] or 500
+                        if weaponItem.metadata.ammo and weaponItem.metadata.ammo < (expectedAmmo * 0.3) then
+                            newMetadata.ammo = expectedAmmo
+                            needsUpdate = true
+                            
+                            if Config.Debug then
+                                print(string.format("^3[GunGame Ammo]^7 %s rechargé: %d -> %d (Joueur %d)", 
+                                    weaponName, weaponItem.metadata.ammo, expectedAmmo, source))
+                            end
+                        end
+                        
+                        -- ✅ APPLIQUER LES MODIFICATIONS SI NÉCESSAIRE
+                        if needsUpdate then
+                            exports.ox_inventory:SetMetadata(source, weaponItem.slot, newMetadata)
                         end
                     end
                 end
+            end
+        end
+    end
+end)
+
+-- NETTOYAGE AUTOMATIQUE DU CACHE SERVEUR
+Citizen.CreateThread(function()
+    while true do
+        Wait(5000) -- Toutes les 5 secondes
+        local currentTime = os.time()
+        
+        for key, timestamp in pairs(recentServerKills) do
+            if currentTime - timestamp > 5 then
+                recentServerKills[key] = nil
+            end
+        end
+    end
+end)
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(300000) -- 5 minutes
+        
+        print("^3[GunGame Cleanup]^7 Nettoyage automatique des joueurs fantômes")
+        
+        local connectedPlayers = {}
+        for i = 0, GetNumPlayerIndices() - 1 do
+            local playerId = GetPlayerFromIndex(i)
+            if playerId then
+                connectedPlayers[playerId] = true
+            end
+        end
+        
+        -- Nettoyer les joueurs qui ne sont plus connectés
+        for playerId, data in pairs(playersInGunGame) do
+            if not connectedPlayers[playerId] then
+                print(string.format("^1[GunGame Cleanup]^7 Joueur fantôme détecté: %d", playerId))
+                playersInGunGame[playerId] = nil
+            end
+        end
+        
+        -- Nettoyer playerData
+        for playerId, data in pairs(playerData) do
+            if not connectedPlayers[playerId] then
+                print(string.format("^1[GunGame Cleanup]^7 PlayerData fantôme détecté: %d", playerId))
+                playerData[playerId] = nil
             end
         end
     end
