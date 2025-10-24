@@ -1399,6 +1399,7 @@ end)
 
 Citizen.CreateThread(function()
     local isDead = false
+    local wasAlive = false -- ✅ NOUVEAU: Pour éviter le spam au spawn
     
     while true do
         Wait(100)
@@ -1406,28 +1407,57 @@ Citizen.CreateThread(function()
         if playerData.inGame and not isRespawning then
             local ped = PlayerPedId()
             local health = GetEntityHealth(ped)
+            local isCurrentlyDead = health <= 105
             
-            if health <= 105 and not isDead then
+            -- ✅ ATTENDRE QUE LE JOUEUR SOIT EN VIE AU MOINS UNE FOIS
+            if not wasAlive and health > 105 then
+                wasAlive = true
+                if Config.Debug then
+                    print("^2[GunGame Death]^7 ✅ Joueur confirmé vivant (spawn OK)")
+                end
+            end
+            
+            -- ✅ DÉTECTION DE LA MORT (seulement si le joueur était vivant avant)
+            if isCurrentlyDead and not isDead and wasAlive then
                 isDead = true
+                
+                if Config.Debug then
+                    print("^1[GunGame Death]^7 💀 Mort détectée (health: " .. health .. ")")
+                end
                 
                 -- Retirer armes immédiatement
                 RemoveAllPedWeapons(ped, true)
                 
+                -- Informer le serveur
                 TriggerServerEvent('gungame:playerDeath')
                 
+                -- Notification
+                local respawnSeconds = math.floor(Config.GunGame.respawnDelay / 1000)
                 lib.notify({
                     title = '💀 Mort',
-                    description = 'Respawn dans ' .. math.floor(Config.GunGame.respawnDelay / 1000) .. 's',
+                    description = 'Respawn dans ' .. respawnSeconds .. 's',
                     type = 'error',
-                    duration = 3000
+                    duration = Config.GunGame.respawnDelay
                 })
-                
-                SetTimeout(Config.GunGame.respawnDelay + 2000, function()
-                    isDead = false
-                end)
             end
+            
+            -- ✅ RÉINITIALISER QUAND LE JOUEUR EST VIVANT
+            if isDead and health > 105 then
+                isDead = false
+                wasAlive = true
+                
+                if Config.Debug then
+                    print("^2[GunGame Death]^7 ✅ Joueur respawné (health: " .. health .. ")")
+                end
+            end
+            
         else
-            isDead = false
+            -- ✅ RÉINITIALISER SI LE JOUEUR N'EST PLUS EN JEU
+            if not playerData.inGame then
+                isDead = false
+                wasAlive = false
+            end
+            Wait(500)
         end
     end
 end)
