@@ -87,14 +87,23 @@ Config.SpawnSystem = {
 -- CONFIGURATION DU GUNGAME
 -- ============================================================================
 Config.GunGame = {
-    killsPerWeapon = 2,
-    killsForLastWeapon = 1,
-    respawnDelay = 2000,
-    godmodeAfterSpawn = 3000,
-    giveAmmoPerSpawn = 500,
-    notifyOnKill = true,
-    notifyOnDeath = true,
-    rewardPerWeapon = 125
+    killsPerWeapon = 2,                 -- Kills nécessaires par arme
+    killsForLastWeapon = 1,             -- Kills pour la dernière arme
+    respawnDelay = 2000,                -- Délai de respawn (ms)
+    godmodeAfterSpawn = 3000,           -- Durée du godmode après spawn (ms)
+    giveAmmoPerSpawn = 500,             -- Munitions données au spawn
+    notifyOnKill = true,                -- Notification lors d'un kill
+    notifyOnDeath = true,               -- Notification lors d'une mort
+    
+    -- ✅ SYSTÈME DE RÉCOMPENSES
+    rewardPerWeapon = 125,              -- Récompense par arme complétée (125$ x 20 armes = 2500$)
+    victoryBonus = 500,                 -- Bonus supplémentaire pour la victoire
+    -- Total gagnant = (125 x 20) + 500 = 3000$
+    
+    -- Si vous voulez exactement 2000$ pour le gagnant :
+    -- rewardPerWeapon = 75,            -- 75$ x 20 armes = 1500$
+    -- victoryBonus = 500,              -- Bonus victoire = 500$
+    -- Total = 2000$
 }
 
 -- ============================================================================

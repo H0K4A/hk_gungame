@@ -31,11 +31,16 @@ local respawnStartTime = 0
 
 -- Text3D
 function DrawText3D(x, y, z, text)
-    SetTextScale(0.35, 0.35)
-    SetTextFont(4)
-    SetTextCentre(true)
+    SetTextScale(0.25, 0.25)
+    SetTextFont(0)
+    SetTextProportional(1)
+    SetTextColour(255, 255, 255, 215)
+    SetTextDropShadow(0, 0, 0, 255)
+    SetTextEdge(2, 0, 0, 0, 150)
+    SetTextCentre(1)
+    SetTextOutline()
     SetTextEntry("STRING")
-    AddTextComponentString(text)
+    AddTextComponentString(text or "")
     SetDrawOrigin(x, y, z, 0)
     DrawText(0.0, 0.0)
     ClearDrawOrigin()
@@ -581,19 +586,10 @@ local function canClaimKill(victim)
         return false
     end
     
-    -- 4. Vérifier qu'on a bien une arme équipée
+    -- 3. Vérifier qu'on a bien une arme équipée
     local currentWeapon = GetSelectedPedWeapon(playerPed)
     if currentWeapon == GetHashKey("WEAPON_UNARMED") then
         return false
-    end
-    
-    -- 5. Vérifier que notre arme correspond à celle du GunGame
-    if playerData.currentWeaponIndex then
-        local expectedWeapon = Config.Weapons[playerData.currentWeaponIndex]
-        if expectedWeapon and GetHashKey(expectedWeapon) ~= currentWeapon then
-            print("^3[GunGame Kill]^7 Arme incorrecte")
-            return false
-        end
     end
     
     return true
@@ -903,42 +899,46 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
         
         -- ✅ VÉRIFIER SI ON PEUT CLAIM CE KILL
         if not canClaimKill(victim) then
-            print("^3[GunGame Kill]^7 Kill refusé (canClaimKill = false)")
+            if Config.Debug then
+                print("^3[GunGame Kill]^7 Kill refusé (canClaimKill = false)")
+            end
             return
         end
         
-        -- ✅ ANTI-DOUBLON
+        -- ✅ ANTI-DOUBLON LOCAL
         if processedDeaths[victim] then
             local timeSinceProcessed = currentTime - processedDeaths[victim]
             if timeSinceProcessed < 3000 then
+                if Config.Debug then
+                    print("^3[GunGame Kill]^7 Kill doublon détecté (ignoré)")
+                end
                 return
             end
         end
         
         if recentKills[victim] then
+            if Config.Debug then
+                print("^3[GunGame Kill]^7 Kill récent détecté (ignoré)")
+            end
             return
         end
         
         -- ✅ COOLDOWN GLOBAL
         if currentTime - lastKillTime < killCooldown then
+            if Config.Debug then
+                print("^3[GunGame Kill]^7 Cooldown actif (ignoré)")
+            end
             return
         end
         
-        -- ✅ VÉRIFIER L'ARME UTILISÉE
-        local currentWeapon = GetSelectedPedWeapon(playerPed)
-        if currentWeapon ~= weaponHash then
-            print("^3[GunGame Kill]^7 Arme différente")
-            return
-        end
-        
-        -- ✅ ENREGISTRER LE KILL
+        -- ✅ ENREGISTRER LE KILL LOCALEMENT
         lastKillTime = currentTime
         recentKills[victim] = currentTime
         processedDeaths[victim] = currentTime
         
         -- ✅ ATTENDRE UN COURT DÉLAI AVANT D'ENVOYER AU SERVEUR
-        -- Cela permet de s'assurer que c'est bien notre kill
-        SetTimeout(100, function()
+        SetTimeout(150, function()
+            -- Double vérification que le kill est toujours valide
             if not IsEntityDead(playerPed) and IsEntityDead(victim) then
                 
                 -- ✅ DIFFÉRENCIER JOUEUR/BOT
@@ -947,15 +947,23 @@ AddEventHandler('gameEventTriggered', function(eventName, data)
                     if targetPlayerId ~= -1 then
                         local targetServerId = GetPlayerServerId(targetPlayerId)
                         
-                        print(string.format("^2[GunGame Kill]^7 → Kill joueur confirmé: %d", targetServerId))
+                        if Config.Debug then
+                            print(string.format("^2[GunGame Kill]^7 → Kill joueur confirmé: %d", targetServerId))
+                        end
+                        
                         TriggerServerEvent('gungame:registerKill', targetServerId, false)
                     end
                 else
-                    print("^2[GunGame Kill]^7 → Kill NPC/Bot confirmé")
+                    if Config.Debug then
+                        print("^2[GunGame Kill]^7 → Kill NPC/Bot confirmé")
+                    end
+                    
                     TriggerServerEvent('gungame:registerKill', nil, true)
                 end
             else
-                print("^3[GunGame Kill]^7 Kill annulé (vérification échouée)")
+                if Config.Debug then
+                    print("^3[GunGame Kill]^7 Kill annulé (vérification échouée)")
+                end
             end
         end)
     end
@@ -966,7 +974,8 @@ RegisterNetEvent('gungame:syncWeaponKills')
 AddEventHandler('gungame:syncWeaponKills', function(newKillCount)
     
     if Config.Debug then
-        print(string.format("^5[GunGame Sync]^7 Kills mis à jour: %d", newKillCount))
+        print(string.format("^5[GunGame Sync]^7 Kills mis à jour: %d (ancien: %d)", 
+            newKillCount, playerData.weaponKills or 0))
     end
     
     -- ✅ METTRE À JOUR IMMÉDIATEMENT
@@ -1000,7 +1009,6 @@ AddEventHandler('gungame:resetWeaponKills', function()
     processedDeaths = {}
 end)
 
--- ✅ CORRECTION updateWeaponIndex (SWITCH D'ARME)
 RegisterNetEvent('gungame:updateWeaponIndex')
 AddEventHandler('gungame:updateWeaponIndex', function(newIndex)
     if Config.Debug then
@@ -1321,7 +1329,7 @@ end)
 
 Citizen.CreateThread(function()
     while true do
-        Wait(3000) -- Toutes les 3 secondes
+        Wait(3000)
         local currentTime = GetGameTimer()
         
         -- Nettoyer recentKills
@@ -1341,7 +1349,6 @@ Citizen.CreateThread(function()
 end)
 
 -- Détection par HasEntityBeenDamagedByWeapon 
---[[
     Citizen.CreateThread(function()
         while true do
             Wait(100)
@@ -1387,7 +1394,6 @@ end)
             end
         end
     end)
---]]
 
 -- DÉTECTION DES MORTS
 
