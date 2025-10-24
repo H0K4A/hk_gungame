@@ -23,7 +23,7 @@ Config.GunGamePed = {
     invincible = true,
     frozen = true,
     blockEvents = true,
-    text = "🔫 GunGame"
+    text = "GunGame"
 }
 
 -- ============================================================================

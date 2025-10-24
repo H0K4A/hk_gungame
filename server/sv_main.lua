@@ -263,8 +263,10 @@ AddEventHandler('gungame:registerKill', function(targetSource)
         return
     end
     
+    print("^5[DEBUG KILL]^7 Instance active: OK")
+    
     -- Vérifier que la victime est dans la même instance
-    if not targetSource then
+    if targetSource then
         targetSource = tonumber(targetSource)
         
         if not playerData[targetSource] then
@@ -278,65 +280,74 @@ AddEventHandler('gungame:registerKill', function(targetSource)
         end
     end
 
-    -- ÉTAPE 2 : INCRÉMENTER LES COMPTEURS
+    -- ÉTAPE 2 : RÉCUPÉRER LES DONNÉES ACTUELLES
     
     local currentWeaponIndex = playerData[source].currentWeapon or 1
     local weaponKills = playerData[source].weaponKills or 0
     local totalKills = playerData[source].totalKills or 0
+    local weaponsCount = #Config.Weapons
     
-    -- Incrémenter
+    -- ÉTAPE 3 : CALCULER LES KILLS REQUIS
+    
+    local killsRequired = currentWeaponIndex == weaponsCount 
+        and Config.GunGame.killsForLastWeapon 
+        or Config.GunGame.killsPerWeapon
+    
+    -- ÉTAPE 4 : INCRÉMENTER LES COMPTEURS
+    
     weaponKills = weaponKills + 1
     totalKills = totalKills + 1
     
-    -- Sauvegarder
     playerData[source].weaponKills = weaponKills
     playerData[source].totalKills = totalKills
     
     -- Synchroniser avec le client
     TriggerClientEvent('gungame:syncWeaponKills', source, weaponKills)
     
-    -- ÉTAPE 3 : CALCULER LA PROGRESSION
-    
-    local weaponsCount = #Config.Weapons
-    local killsRequired = currentWeaponIndex == weaponsCount 
-        and Config.GunGame.killsForLastWeapon 
-        or Config.GunGame.killsPerWeapon
-    
-    -- ÉTAPE 4 : NOTIFICATIONS
+    -- ÉTAPE 5 : NOTIFICATIONS
     
     local xPlayer = ESX.GetPlayerFromId(source)
     local killerName = xPlayer and xPlayer.getName() or "Joueur"
     
-    local xVictim = ESX.GetPlayerFromId(targetSource)
-    local victimName = xVictim and xVictim.getName() or "Joueur"
-        
+    local victimName = "Bot"
+    if targetSource then
+        local xVictim = ESX.GetPlayerFromId(targetSource)
+        victimName = xVictim and xVictim.getName() or "Joueur"
+    end
+    
     TriggerClientEvent('ox_lib:notify', source, {
         title = '💀 KILL !',
         description = string.format('%s (%d/%d)', victimName, weaponKills, killsRequired),
         type = 'success',
         duration = 3000
     })
-        
-    -- Notifier la victime
-    TriggerClientEvent('ox_lib:notify', targetSource, {
-        title = '☠️ Éliminé',
-        description = 'Par ' .. killerName,
-        type = 'error',
-        duration = 2000
-    })
     
-    -- ÉTAPE 5 : VÉRIFIER SI ON CHANGE D'ARME
+    if targetSource then
+        TriggerClientEvent('ox_lib:notify', targetSource, {
+            title = '☠️ Éliminé',
+            description = 'Par ' .. killerName,
+            type = 'error',
+            duration = 2000
+        })
+    end
+    
+    -- ÉTAPE 6 : VÉRIFIER SI ON CHANGE D'ARME
     
     if weaponKills >= killsRequired then
         
+        -- 🏆 VICTOIRE (dernière arme + kills requis atteints)
         if currentWeaponIndex >= weaponsCount then
             winnerDetected(source, instanceId)
         else
+            -- ⬆️ PASSAGE À L'ARME SUIVANTE
             local nextWeaponIndex = currentWeaponIndex + 1
+            
+            -- 🔥 APPELER LA FONCTION DE PROGRESSION
+            advancePlayerWeapon(source, instanceId, nextWeaponIndex)
         end
     end
     
-    -- ÉTAPE 6 : METTRE À JOUR LE LEADERBOARD
+    -- ÉTAPE 7 : METTRE À JOUR LE LEADERBOARD
     
     updateInstanceLeaderboard(instanceId)
 end)
@@ -456,47 +467,62 @@ end)
 
 
 
--- AVANCER À L'ARME SUIVANTE - VERSION SIMPLIFIÉE
+-- ============================================================================
+-- FONCTION AVANCER À L'ARME SUIVANTE - VERSION AMÉLIORÉE
+-- ============================================================================
 
 function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
-    if not playerData[source] or not InstanceManager.GetInstance(instanceId) then
-        print("^1[GunGame]^7 advancePlayerWeapon: données invalides")
+    
+    if not playerData[source] then
+        print("^1[DEBUG WEAPON]^7 ❌ playerData[source] est nil")
+        return
+    end
+    
+    if not InstanceManager.GetInstance(instanceId) then
+        print("^1[DEBUG WEAPON]^7 ❌ Instance introuvable")
         return
     end
     
     local xPlayer = ESX.GetPlayerFromId(source)
-    if not xPlayer then return end
+    if not xPlayer then 
+        print("^1[DEBUG WEAPON]^7 ❌ xPlayer introuvable")
+        return
+    end
     
     local playerName = xPlayer.getName()
     local weaponsCount = #Config.Weapons
     local nextWeapon = Config.Weapons[nextWeaponIndex]
     
-    print(string.format("^2[GunGame]^7 %s passe de l'arme %d à %d (%s)", 
-        playerName, playerData[source].currentWeapon, nextWeaponIndex, nextWeapon))
+    -- ÉTAPE 1 : SAUVEGARDER LA NOUVELLE ARME
+    local oldWeapon = playerData[source].currentWeapon
+    local oldKills = playerData[source].weaponKills
     
-    -- RESET DES COMPTEURS
-    playerData[source].weaponKills = 0
     playerData[source].currentWeapon = nextWeaponIndex
+    playerData[source].weaponKills = 0
     
-    -- SYNCHRONISER CLIENT
+    -- ÉTAPE 2 : SYNCHRONISER AVEC LE CLIENT
     TriggerClientEvent('gungame:updateWeaponIndex', source, nextWeaponIndex)
+    
     TriggerClientEvent('gungame:resetWeaponKills', source)
+    
     TriggerClientEvent('gungame:syncWeaponKills', source, 0)
     
-    -- ✅ NETTOYER COMPLÈTEMENT L'INVENTAIRE
+    -- ÉTAPE 3 : NETTOYER L'INVENTAIRE
     TriggerClientEvent('gungame:clearAllInventory', source)
     
-    -- ✅ RETIRER TOUTES LES ARMES GUNGAME DE L'INVENTAIRE
-    for _, gunGameWeapon in ipairs(Config.Weapons) do
-        exports.ox_inventory:RemoveItem(source, gunGameWeapon:lower(), 1)
+    -- Retirer toutes les armes GunGame de l'inventaire
+    for i, gunGameWeapon in ipairs(Config.Weapons) do
+        local itemCount = exports.ox_inventory:GetItemCount(source, gunGameWeapon:lower())
+        if itemCount and itemCount > 0 then
+            exports.ox_inventory:RemoveItem(source, gunGameWeapon:lower(), itemCount)
+        end
     end
-    
     Wait(500)
     
-    -- ✅ DONNER LA NOUVELLE ARME (100% durabilité + munitions pleines)
+    -- ÉTAPE 4 : DONNER LA NOUVELLE ARME
     giveWeaponToPlayer(source, nextWeapon, instanceId, false)
     
-    -- NOTIFICATIONS
+    -- ÉTAPE 5 : NOTIFICATIONS
     if nextWeaponIndex == weaponsCount then
         TriggerClientEvent('ox_lib:notify', source, {
             title = '🏆 DERNIÈRE ARME !',
@@ -509,7 +535,7 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
     else
         TriggerClientEvent('ox_lib:notify', source, {
             title = '⬆️ Arme suivante',
-            description = string.format('%s (%d/%d) - Fraîche et rechargée !', 
+            description = string.format('%s (%d/%d)', 
                 nextWeapon:gsub("WEAPON_", ""), 
                 nextWeaponIndex, 
                 weaponsCount),
@@ -518,7 +544,7 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
         })
     end
     
-    -- BROADCAST
+    -- ÉTAPE 6 : BROADCAST AUX AUTRES JOUEURS
     local instance = InstanceManager.GetInstance(instanceId)
     if instance and instance.players then
         for _, playerId in ipairs(instance.players) do
@@ -534,6 +560,7 @@ function advancePlayerWeapon(source, instanceId, nextWeaponIndex)
         end
     end
     
+    -- ÉTAPE 7 : MISE À JOUR DU LEADERBOARD
     updateInstanceLeaderboard(instanceId)
 end
 
@@ -633,49 +660,46 @@ function winnerDetected(source, instanceId)
     end
 end
 
--- DONNER UNE ARME
+-- ============================================================================
+-- DONNER UNE ARME - VERSION DEBUG
+-- ============================================================================
 
 function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
+    
     if not source or not tonumber(source) then
-        print("^1[GunGame]^7 ERREUR: source invalide dans giveWeaponToPlayer")
         return
     end
     
     local xPlayer = ESX.GetPlayerFromId(source)
     if not xPlayer then
-        print("^1[GunGame]^7 ERREUR: xPlayer introuvable pour source " .. source)
         return
     end
     
     if not weapon then
-        print("^1[GunGame]^7 ERREUR: weapon nil dans giveWeaponToPlayer")
         return
     end
     
     local ammo = Config.WeaponAmmo[weapon] or 500
     local weaponName = weapon:lower()
     
-    -- ✅ AMÉLIORATION: Nettoyer complètement l'inventaire des armes GunGame
     for _, gunGameWeapon in ipairs(Config.Weapons) do
         local hasOldWeapon = exports.ox_inventory:GetItem(source, gunGameWeapon:lower(), nil, false)
         if hasOldWeapon and hasOldWeapon.count > 0 then
             exports.ox_inventory:RemoveItem(source, gunGameWeapon:lower(), hasOldWeapon.count)
-            if Config.Debug then
-                print(string.format("^3[GunGame]^7 Retrait de %s (x%d)", gunGameWeapon, hasOldWeapon.count))
-            end
         end
     end
     
     Wait(300)
     
-    -- ✅ DONNER L'ARME AVEC DURABILITÉ 100 ET MUNITIONS PLEINES
     local success = exports.ox_inventory:AddItem(source, weaponName, 1, {
         ammo = ammo,
-        durability = 100  -- Durabilité maximale
+        durability = 100
     })
     
     if success then
+        
         Wait(300)
+        
         TriggerClientEvent('gungame:equipWeapon', source, weapon)
         
         local weaponLabel = weapon:gsub("WEAPON_", "")
@@ -695,14 +719,7 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
                 duration = 2500
             })
         end
-        
-        if Config.Debug then
-            print(string.format("^2[GunGame]^7 ✅ %s donné au joueur %d (%d munitions, 100%% durabilité)", 
-                weapon, source, ammo))
-        end
     else
-        print("^1[GunGame]^7 ERREUR: Impossible d'ajouter l'arme " .. weapon .. " au joueur " .. source)
-        
         -- Retry après 500ms
         SetTimeout(500, function()
             if playerData[source] and playerData[source].instanceId == instanceId then
