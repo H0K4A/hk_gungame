@@ -24,6 +24,8 @@ local processedDeaths = {}
 local pendingKillConfirmation = {}
 local isRespawning = false
 local respawnStartTime = 0
+local lastRespawnTime = 0
+local respawnCooldown = 1000
 
 -- ============================================================================
 -- FUNCTIONS
@@ -843,7 +845,24 @@ end)
 
 RegisterNetEvent('gungame:teleportBeforeRevive')
 AddEventHandler('gungame:teleportBeforeRevive', function(spawn)
+    local currentTime = GetGameTimer()
+    
+    -- Anti-spam de respawn
+    if currentTime - lastRespawnTime < respawnCooldown then
+        if Config.Debug then
+            print("^3[GunGame Respawn]^7 ⚠️ Cooldown respawn actif")
+        end
+        return
+    end
+    
+    lastRespawnTime = currentTime
+    
     local ped = PlayerPedId()
+    
+    if Config.Debug then
+        print(string.format("^5[GunGame Respawn]^7 📍 TP vers spawn (%.1f, %.1f, %.1f)", 
+            spawn.x, spawn.y, spawn.z))
+    end
     
     isRespawning = true
     
@@ -1030,6 +1049,25 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
     local ped = PlayerPedId()
     local isWinner = winnerName == GetPlayerName(PlayerId())
     
+    -- ✅ S'ASSURER QU'ON EST VIVANT
+    local health = GetEntityHealth(ped)
+    if health <= 105 then
+        if Config.Debug then
+            print("^3[GunGame Victory]^7 Joueur mort, attente du revive...")
+        end
+        
+        -- Attendre d'être revive (max 2 secondes)
+        local waitCount = 0
+        while GetEntityHealth(ped) <= 105 and waitCount < 20 do
+            Wait(100)
+            waitCount = waitCount + 1
+        end
+        
+        if Config.Debug then
+            print("^2[GunGame Victory]^7 Joueur revive, santé: " .. GetEntityHealth(ped))
+        end
+    end
+    
     -- ✅ NOTIFICATION DE VICTOIRE
     lib.notify({
         title = '🏆 VICTOIRE !',
@@ -1056,11 +1094,16 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
         DoScreenFadeOut(500)
         while not IsScreenFadedOut() do Wait(0) end
         
-        -- ✅ 2. NETTOYER TOUTES LES ARMES (IMPORTANT!)
-        RemoveAllPedWeapons(ped, true)
+        -- ✅ 2. FORCER LA SANTÉ AU MAXIMUM (au cas où)
+        SetEntityHealth(ped, 200)
         
-        -- ✅ 3. S'ASSURER QUE L'INVENTAIRE EST BIEN NETTOYÉ
+        Wait(200)
+        
+        -- ✅ 3. NETTOYER TOUTES LES ARMES
+        RemoveAllPedWeapons(ped, true)
         TriggerEvent('ox_inventory:disarm', true)
+        
+        Wait(100)
         
         -- ✅ 4. NETTOYER LES BLIPS
         removeGunGameZoneBlip()
@@ -1068,12 +1111,12 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
         
         -- ✅ 5. TÉLÉPORTATION FORCÉE
         if lastSpawn then
-            print("^2[GunGame Victory]^7 TP vers position sauvegardée")
+            if Config.Debug then
+                print("^2[GunGame Victory]^7 TP vers position sauvegardée")
+            end
             
             -- Première tentative
             SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
-            
-            -- Attendre que le TP soit effectif
             Wait(300)
             
             -- Vérifier si le TP a fonctionné
@@ -1081,19 +1124,21 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
             local distance = #(vector3(lastSpawn.x, lastSpawn.y, lastSpawn.z) - newCoords)
             
             if distance > 5.0 then
-                print("^3[GunGame Victory]^7 TP raté, nouvelle tentative...")
+                if Config.Debug then
+                    print("^3[GunGame Victory]^7 TP raté, nouvelle tentative...")
+                end
                 SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
                 Wait(200)
             end
             
             -- Forcer la position au sol
             SetPedCoordsKeepVehicle(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z)
-            
-            -- Nettoyer les animations
             ClearPedTasksImmediately(ped)
             
         else
-            print("^3[GunGame Victory]^7 Pas de position sauvegardée, TP hôpital")
+            if Config.Debug then
+                print("^3[GunGame Victory]^7 Pas de position sauvegardée, TP hôpital")
+            end
             
             -- Fallback vers l'hôpital
             local hospitalCoords = vector3(307.7, -1433.4, 29.9)
@@ -1102,7 +1147,17 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
             ClearPedTasksImmediately(ped)
         end
         
-        -- ✅ 6. RÉINITIALISER L'ÉTAT LOCAL
+        -- ✅ 6. VÉRIFIER QU'ON EST BIEN VIVANT
+        local finalHealth = GetEntityHealth(ped)
+        if finalHealth <= 105 then
+            if Config.Debug then
+                print("^1[GunGame Victory]^7 Joueur encore mort, revive forcé")
+            end
+            -- Dernier recours: demander un revive au serveur
+            TriggerServerEvent('gungame:forceReviveOnVictory')
+        end
+        
+        -- ✅ 7. RÉINITIALISER L'ÉTAT LOCAL
         playerData.inGame = false
         playerData.instanceId = nil
         playerData.mapId = nil
@@ -1113,17 +1168,19 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
         playerData.godMode = false
         playerData.lastSpawnPoint = nil
         
-        -- ✅ 7. CACHER L'UI
+        -- ✅ 8. CACHER L'UI
         lib.hideTextUI()
         
-        -- ✅ 8. VÉRIFICATION FINALE : PLUS D'ARMES
+        -- ✅ 9. VÉRIFICATION FINALE : PLUS D'ARMES
         Wait(200)
         RemoveAllPedWeapons(ped, true)
         
-        -- ✅ 9. FADE IN
+        -- ✅ 10. FADE IN
         DoScreenFadeIn(700)
         
-        print("^2[GunGame Victory]^7 Retour au monde normal terminé")
+        if Config.Debug then
+            print("^2[GunGame Victory]^7 Retour au monde normal terminé")
+        end
     end)
 end)
 
@@ -1399,55 +1456,120 @@ end)
 
 Citizen.CreateThread(function()
     local isDead = false
-    local wasAlive = false -- ✅ NOUVEAU: Pour éviter le spam au spawn
+    local wasAlive = false
+    local lastHealth = 200
+    local deathNotificationSent = false
     
     while true do
-        Wait(100)
+        Wait(50) -- ✅ Check rapide (50ms au lieu de 100ms)
         
         if playerData.inGame and not isRespawning then
             local ped = PlayerPedId()
             local health = GetEntityHealth(ped)
-            local isCurrentlyDead = health <= 105
+            local isCurrentlyDead = IsEntityDead(ped) -- ✅ Utiliser la native directement
+            
+            -- ✅ LOG DES CHANGEMENTS DE SANTÉ (DEBUG)
+            if Config.Debug and math.abs(health - lastHealth) > 10 then
+                print(string.format("^3[GunGame Health]^7 Santé: %d -> %d", lastHealth, health))
+            end
+            lastHealth = health
             
             -- ✅ ATTENDRE QUE LE JOUEUR SOIT EN VIE AU MOINS UNE FOIS
-            if not wasAlive and health > 105 then
+            if not wasAlive and health > 105 and not isCurrentlyDead then
                 wasAlive = true
                 if Config.Debug then
-                    print("^2[GunGame Death]^7 ✅ Joueur confirmé vivant (spawn OK)")
+                    print("^2[GunGame Death]^7 ✅ Joueur confirmé vivant (santé: " .. health .. ")")
                 end
             end
             
-            -- ✅ DÉTECTION DE LA MORT (seulement si le joueur était vivant avant)
-            if isCurrentlyDead and not isDead and wasAlive then
+            -- ✅ DÉTECTION MULTI-MÉTHODE
+            local shouldBeDead = false
+            
+            -- Méthode 1: Santé basse
+            if health <= 105 then
+                shouldBeDead = true
+            end
+            
+            -- Méthode 2: Native IsEntityDead
+            if isCurrentlyDead then
+                shouldBeDead = true
+            end
+            
+            -- Méthode 3: Ragdoll prolongé (joueur au sol)
+            if IsPedRagdoll(ped) then
+                local ragdollTime = GetPedConfigFlag(ped, 208, true)
+                if ragdollTime then
+                    shouldBeDead = true
+                end
+            end
+            
+            -- ✅ DÉCLENCHEMENT DE LA MORT
+            if shouldBeDead and not isDead and wasAlive then
                 isDead = true
+                deathNotificationSent = false
                 
                 if Config.Debug then
-                    print("^1[GunGame Death]^7 💀 Mort détectée (health: " .. health .. ")")
+                    print(string.format("^1[GunGame Death]^7 💀 MORT DÉTECTÉE ! (Santé: %d, IsEntityDead: %s)", 
+                        health, tostring(isCurrentlyDead)))
                 end
+                
+                -- ✅ BLOQUER LE SYSTÈME DE REVIVE EXTERNE
+                -- Empêcher le joueur d'attendre 60 secondes
+                SetTimeout(100, function()
+                    -- Force le joueur à ne pas être en "état de mort" prolongé
+                    if Config.Debug then
+                        print("^3[GunGame Death]^7 Blocage du système de mort externe")
+                    end
+                end)
                 
                 -- Retirer armes immédiatement
                 RemoveAllPedWeapons(ped, true)
                 
-                -- Informer le serveur
+                -- Notification (une seule fois)
+                if not deathNotificationSent then
+                    local respawnSeconds = math.floor(Config.GunGame.respawnDelay / 1000)
+                    lib.notify({
+                        title = '💀 Vous êtes mort',
+                        description = 'Respawn GunGame dans ' .. respawnSeconds .. 's',
+                        type = 'error',
+                        duration = Config.GunGame.respawnDelay
+                    })
+                    deathNotificationSent = true
+                end
+                
+                -- ✅ INFORMER LE SERVEUR IMMÉDIATEMENT
                 TriggerServerEvent('gungame:playerDeath')
                 
-                -- Notification
-                local respawnSeconds = math.floor(Config.GunGame.respawnDelay / 1000)
-                lib.notify({
-                    title = '💀 Mort',
-                    description = 'Respawn dans ' .. respawnSeconds .. 's',
-                    type = 'error',
-                    duration = Config.GunGame.respawnDelay
-                })
+                -- ✅ BACKUP: Si après 3 secondes toujours pas respawn, redemander
+                SetTimeout(3000, function()
+                    if isDead and playerData.inGame then
+                        if Config.Debug then
+                            print("^3[GunGame Death]^7 ⚠️ Pas de respawn après 3s, redemande au serveur")
+                        end
+                        TriggerServerEvent('gungame:forceRespawn')
+                    end
+                end)
             end
             
             -- ✅ RÉINITIALISER QUAND LE JOUEUR EST VIVANT
-            if isDead and health > 105 then
+            if isDead and health > 105 and not isCurrentlyDead then
                 isDead = false
+                deathNotificationSent = false
                 wasAlive = true
                 
                 if Config.Debug then
-                    print("^2[GunGame Death]^7 ✅ Joueur respawné (health: " .. health .. ")")
+                    print(string.format("^2[GunGame Death]^7 ✅ Joueur revenu en vie (santé: %d)", health))
+                end
+            end
+            
+            -- ✅ BLOQUER CONTRÔLES SI MORT
+            if isDead then
+                DisableAllControlActions(0)
+                
+                -- ✅ EMPÊCHER LE SYSTÈME DE MORT EXTERNE DE PRENDRE LE DESSUS
+                -- Cela empêche le joueur de rester au sol 60 secondes
+                if IsPedDeadOrDying(ped, true) then
+                    -- On ne fait rien, on laisse le serveur gérer le respawn
                 end
             end
             
@@ -1456,6 +1578,7 @@ Citizen.CreateThread(function()
             if not playerData.inGame then
                 isDead = false
                 wasAlive = false
+                deathNotificationSent = false
             end
             Wait(500)
         end

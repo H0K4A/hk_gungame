@@ -4,16 +4,17 @@ local playerData = {}
 local recentServerKills = {}
 local playersInGunGame = {}
 local deathProcessing = {}
+local lastDeathTime = {}
 
 
 
 AddEventHandler('onResourceStart', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then return end
     
-    -- ✅ NETTOYER LES LOCKS DE MORT AU REDÉMARRAGE
     deathProcessing = {}
+    lastDeathTime = {}
     
-    print("^2[GunGame]^7 Système de mort/respawn initialisé")
+    print("^2[GunGame]^7 ✅ Système de mort/respawn initialisé (version ultra-fiable)")
 end)
 
 
@@ -497,29 +498,46 @@ end)
 RegisterNetEvent('gungame:playerDeath')
 AddEventHandler('gungame:playerDeath', function()
     local source = source
+    local currentTime = os.time()
+    
+    -- ✅ ANTI-SPAM: Si mort il y a moins de 2 secondes, ignorer
+    if lastDeathTime[source] and (currentTime - lastDeathTime[source]) < 2 then
+        if Config.Debug then
+            print(string.format("^3[GunGame Death]^7 ⚠️ Spam de mort pour joueur %d (ignoré)", source))
+        end
+        return
+    end
+    
+    lastDeathTime[source] = currentTime
     
     -- ✅ ANTI-SPAM: Ignorer si déjà en train de traiter
     if deathProcessing[source] then
         if Config.Debug then
-            print(string.format("^3[GunGame Death]^7 ⚠️ Mort déjà en cours pour joueur %d (ignoré)", source))
+            print(string.format("^3[GunGame Death]^7 ⚠️ Mort déjà en cours pour joueur %d", source))
         end
         return
     end
     
     if not playerData[source] then 
-        print(string.format("^1[GunGame Death]^7 Joueur %d mort mais pas dans playerData", source))
+        if Config.Debug then
+            print(string.format("^1[GunGame Death]^7 Joueur %d mort mais pas dans playerData", source))
+        end
         return 
     end
     
     local instanceId = playerData[source].instanceId
     if not instanceId then 
-        print(string.format("^1[GunGame Death]^7 Joueur %d mort mais pas d'instance", source))
+        if Config.Debug then
+            print(string.format("^1[GunGame Death]^7 Joueur %d mort mais pas d'instance", source))
+        end
         return 
     end
     
     local instance = InstanceManager.GetInstance(instanceId)
     if not instance or not instance.gameActive then 
-        print(string.format("^1[GunGame Death]^7 Joueur %d mort mais instance %d inactive", source, instanceId))
+        if Config.Debug then
+            print(string.format("^1[GunGame Death]^7 Joueur %d mort mais instance %d inactive", source, instanceId))
+        end
         return 
     end
     
@@ -530,7 +548,7 @@ AddEventHandler('gungame:playerDeath', function()
     SpawnSystem.FreeSpawn(instanceId, source)
     
     if Config.Debug then
-        print(string.format("^3[GunGame Death]^7 Joueur %d mort, respawn dans %dms", 
+        print(string.format("^3[GunGame Death]^7 ☠️ Joueur %d mort, respawn dans %dms", 
             source, Config.GunGame.respawnDelay))
     end
     
@@ -538,16 +556,16 @@ AddEventHandler('gungame:playerDeath', function()
     SetTimeout(Config.GunGame.respawnDelay, function()
         -- Vérifier que le joueur est toujours dans l'instance
         if playerData[source] and playerData[source].instanceId == instanceId then
+            if Config.Debug then
+                print(string.format("^2[GunGame Death]^7 ⏰ Déclenchement respawn pour joueur %d", source))
+            end
+            
             respawnPlayerInInstance(source, instanceId)
             
-            -- ✅ LIBÉRER LE LOCK APRÈS 2 SECONDES (pour éviter spam)
+            -- ✅ LIBÉRER LE LOCK APRÈS 2 SECONDES
             SetTimeout(2000, function()
                 deathProcessing[source] = nil
             end)
-            
-            if Config.Debug then
-                print(string.format("^2[GunGame Death]^7 ✅ Joueur %d respawné", source))
-            end
         else
             deathProcessing[source] = nil
             if Config.Debug then
@@ -651,6 +669,50 @@ AddEventHandler('gungame:requestCurrentWeapon', function()
         
         giveWeaponToPlayer(source, currentWeapon, instanceId, false)
     end
+end)
+
+RegisterNetEvent('gungame:forceReviveOnVictory')
+AddEventHandler('gungame:forceReviveOnVictory', function()
+    local source = source
+    
+    if Config.Debug then
+        print(string.format("^1[GunGame Victory]^7 Revive forcé demandé par joueur %d", source))
+    end
+    
+    -- Forcer le revive
+    TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
+    
+    -- Forcer la santé
+    SetTimeout(200, function()
+        local ped = GetPlayerPed(source)
+        if ped and ped > 0 then
+            SetEntityHealth(ped, 200)
+        end
+    end)
+end)
+
+RegisterNetEvent('gungame:forceRespawn')
+AddEventHandler('gungame:forceRespawn', function()
+    local source = source
+    
+    if not playerData[source] or not playerData[source].inGame then
+        return
+    end
+    
+    local instanceId = playerData[source].instanceId
+    if not instanceId then
+        return
+    end
+    
+    if Config.Debug then
+        print(string.format("^1[GunGame Death]^7 🔴 RESPAWN FORCÉ demandé par joueur %d", source))
+    end
+    
+    -- ✅ ANNULER LE LOCK DE MORT SI EXISTANT
+    deathProcessing[source] = nil
+    
+    -- ✅ FORCER LE RESPAWN IMMÉDIATEMENT
+    respawnPlayerInInstance(source, instanceId)
 end)
 
 
@@ -819,6 +881,7 @@ function winnerDetected(source, instanceId)
     
     print("^2[GunGame]^7 🏆 Gagnant: " .. xPlayer.getName())
     
+    -- ✅ RÉCUPÉRER TOUS LES JOUEURS DE L'INSTANCE
     local playersList = {}
     for _, playerId in ipairs(instance.players) do
         if playerData[playerId] then
@@ -826,22 +889,58 @@ function winnerDetected(source, instanceId)
         end
     end
     
-    -- Broadcast victoire
+    -- ✅ ÉTAPE 1: REVIVE IMMÉDIAT DE TOUS LES JOUEURS MORTS
+    for _, playerId in ipairs(playersList) do
+        local ped = GetPlayerPed(playerId)
+        if ped and ped > 0 then
+            local health = GetEntityHealth(ped)
+            
+            -- Si le joueur est mort, le revive immédiatement
+            if health <= 105 then
+                if Config.Debug then
+                    print(string.format("^3[GunGame Victory]^7 Revive forcé du joueur %d avant la fin", playerId))
+                end
+                
+                -- Revive immédiat
+                TriggerClientEvent('LeM:client:healPlayer', playerId, { revive = true })
+                
+                -- Forcer la santé au maximum
+                SetTimeout(200, function()
+                    SetEntityHealth(ped, 200)
+                end)
+                
+                -- Notification
+                TriggerClientEvent('ox_lib:notify', playerId, {
+                    title = '♻️ Respawn',
+                    description = 'Partie terminée',
+                    type = 'info',
+                    duration = 2000
+                })
+            end
+        end
+    end
+    
+    -- ✅ ATTENDRE QUE TOUS LES JOUEURS SOIENT REVIVE
+    Wait(1000)
+    
+    -- ✅ ÉTAPE 2: BROADCAST VICTOIRE
     for _, playerId in ipairs(playersList) do
         TriggerClientEvent('gungame:playerWon', playerId, xPlayer.getName(), reward)
     end
     
-    -- ✅ NETTOYAGE FORCÉ AVEC LA NOUVELLE FONCTION
+    -- ✅ ÉTAPE 3: NETTOYAGE FORCÉ APRÈS UN DÉLAI
     SetTimeout(500, function()
         for _, playerId in ipairs(playersList) do
             if playerData[playerId] then
                 SpawnSystem.FreeSpawn(instanceId, playerId)
                 
-                -- ✅ UTILISER LA FONCTION DE NETTOYAGE FORCÉ
+                -- Nettoyer l'inventaire
                 forceCleanupPlayer(playerId)
                 
+                -- Retour au monde normal
                 RoutingBucketManager.ReturnPlayerToWorld(playerId)
                 
+                -- Supprimer les données
                 playerData[playerId] = nil
             end
         end
@@ -849,18 +948,30 @@ function winnerDetected(source, instanceId)
         resetInstance(instanceId)
     end)
     
-    -- Heal + double vérification après 2 secondes
-    SetTimeout(1000, function()
-        TriggerClientEvent('LeM:client:healPlayer', source, { revive = true })
-        
-        -- ✅ DOUBLE VÉRIFICATION APRÈS 2 SECONDES
-        SetTimeout(1000, function()
-            for _, playerId in ipairs(playersList) do
-                forceCleanupPlayer(playerId)
+    -- ✅ ÉTAPE 4: DOUBLE VÉRIFICATION APRÈS 2 SECONDES
+    SetTimeout(2000, function()
+        for _, playerId in ipairs(playersList) do
+            -- Re-vérifier la santé et forcer si nécessaire
+            local ped = GetPlayerPed(playerId)
+            if ped and ped > 0 then
+                local health = GetEntityHealth(ped)
+                if health <= 105 then
+                    if Config.Debug then
+                        print(string.format("^1[GunGame Victory]^7 Double revive pour joueur %d", playerId))
+                    end
+                    TriggerClientEvent('LeM:client:healPlayer', playerId, { revive = true })
+                    SetTimeout(100, function()
+                        SetEntityHealth(ped, 200)
+                    end)
+                end
             end
-        end)
+            
+            -- Nettoyer l'inventaire (double check)
+            forceCleanupPlayer(playerId)
+        end
     end)
     
+    -- ✅ ROTATION DE MAP SI ACTIVÉE
     if Config.MapRotation.enabled and Config.MapRotation.rotateOnVictory then
         local mapId = instance.map
         MapRotation.OnVictory(mapId)
