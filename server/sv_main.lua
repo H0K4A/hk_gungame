@@ -1041,13 +1041,13 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     local weaponName = weapon:lower()
     
     if Config.Debug then
-        print(string.format("^5[GunGame Weapon]^7 Donner %s à joueur %d", weapon, source))
+        print(string.format("^5[GunGame Weapon]^7 Donner %s à joueur %d (Munitions: %d)", weapon, source, ammo))
     end
     
     -- ✅ NETTOYER D'ABORD TOUTES LES ARMES
     TriggerClientEvent('gungame:clearAllInventory', source)
     
-    Wait(200)
+    Wait(300)
     
     -- Retirer toutes les armes GunGame
     for _, gunGameWeapon in ipairs(Config.Weapons) do
@@ -1059,17 +1059,56 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     
     Wait(300)
     
-    -- ✅ AJOUTER LA NOUVELLE ARME
-    local success = exports.ox_inventory:AddItem(source, weaponName, 1, {
+    -- ✅ AJOUTER LA NOUVELLE ARME AVEC MÉTADONNÉES GARANTIES
+    local metadata = {
         ammo = ammo,
-        durability = 100
-    })
+        durability = 100,
+        registered = false,
+        serial = "GG" .. math.random(10000, 99999)
+    }
+    
+    local success = exports.ox_inventory:AddItem(source, weaponName, 1, metadata)
     
     if success then
-        Wait(400)
+        if Config.Debug then
+            print(string.format("^2[GunGame Weapon]^7 ✅ Item ajouté: %s", weapon))
+        end
+        
+        Wait(500)
+        
+        -- ✅ FORCER LES MÉTADONNÉES PLUSIEURS FOIS
+        for i = 1, 3 do
+            local weaponItem = exports.ox_inventory:GetItem(source, weaponName, nil, false)
+            if weaponItem and weaponItem.slot then
+                exports.ox_inventory:SetMetadata(source, weaponItem.slot, {
+                    ammo = ammo,
+                    durability = 100,
+                    registered = false,
+                    serial = metadata.serial
+                })
+                
+                if Config.Debug and i == 1 then
+                    print(string.format("^2[GunGame Weapon]^7 ✅ Métadonnées forcées: Slot %d, Munitions: %d", 
+                        weaponItem.slot, ammo))
+                end
+                
+                Wait(200)
+            end
+        end
+        
+        Wait(300)
         
         -- ✅ ÉQUIPER L'ARME
         TriggerClientEvent('gungame:equipWeapon', source, weapon)
+        
+        -- ✅ FORCER LA SYNCHRONISATION CÔTÉ CLIENT
+        SetTimeout(800, function()
+            TriggerClientEvent('gungame:forceAmmoUpdate', source, weapon, ammo)
+        end)
+        
+        SetTimeout(1500, function()
+            TriggerClientEvent('gungame:forceAmmoUpdate', source, weapon, ammo)
+        end)
         
         -- ✅ NOTIFICATION
         local weaponLabel = weapon:gsub("WEAPON_", "")
@@ -1086,7 +1125,6 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
     else
         print(string.format("^1[GunGame Weapon]^7 ❌ Échec de l'ajout de %s pour %d", weapon, source))
         
-        -- Retry après 500ms
         SetTimeout(500, function()
             if playerData[source] and playerData[source].instanceId == instanceId then
                 giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
@@ -1094,6 +1132,7 @@ function giveWeaponToPlayer(source, weapon, instanceId, isFirstWeapon)
         end)
     end
 end
+
 
 -- ============================================================================
 -- RETIRER UN JOUEUR DE L'INSTANCE
@@ -1410,7 +1449,7 @@ end
 -- Thread qui vérifie et répare la durabilité toutes les 2 secondes
 Citizen.CreateThread(function()
     while true do
-        Wait(1000) -- Vérification toutes les 1 seconde
+        Wait(500) -- Vérification toutes les 0.5 secondes
         
         for source, data in pairs(playerData) do
             if data.inGame and data.currentWeapon then
@@ -1421,37 +1460,45 @@ Citizen.CreateThread(function()
                     
                     if weaponItem and weaponItem.metadata then
                         local needsUpdate = false
+                        local expectedAmmo = Config.WeaponAmmo[weaponName] or 500
                         local newMetadata = {
-                            ammo = weaponItem.metadata.ammo or 500,
+                            ammo = weaponItem.metadata.ammo or expectedAmmo,
                             durability = weaponItem.metadata.durability or 100
                         }
                         
-                        -- ✅ VÉRIFIER LA DURABILITÉ
-                        if weaponItem.metadata.durability and weaponItem.metadata.durability < 100 then
+                        -- ✅ FORCER LA DURABILITÉ À 100% EN PERMANENCE
+                        if not weaponItem.metadata.durability or weaponItem.metadata.durability < 100 then
                             newMetadata.durability = 100
                             needsUpdate = true
                             
                             if Config.Debug then
-                                print(string.format("^3[GunGame Durability]^7 %s réparé: %d%% -> 100%% (Joueur %d)", 
-                                    weaponName, math.floor(weaponItem.metadata.durability), source))
+                                print(string.format("^3[GunGame Durability]^7 %s réparé: %s%% -> 100%% (Joueur %d)", 
+                                    weaponName, 
+                                    weaponItem.metadata.durability and math.floor(weaponItem.metadata.durability) or "0",
+                                    source))
                             end
                         end
                         
-                        -- ✅ VÉRIFIER LES MUNITIONS
-                        local expectedAmmo = Config.WeaponAmmo[weaponName] or 500
-                        if weaponItem.metadata.ammo and weaponItem.metadata.ammo < (expectedAmmo * 0.3) then
+                        -- ✅ FORCER LES MUNITIONS SI TROP BASSES
+                        if not weaponItem.metadata.ammo or weaponItem.metadata.ammo < expectedAmmo then
                             newMetadata.ammo = expectedAmmo
                             needsUpdate = true
                             
                             if Config.Debug then
                                 print(string.format("^3[GunGame Ammo]^7 %s rechargé: %d -> %d (Joueur %d)", 
-                                    weaponName, weaponItem.metadata.ammo, expectedAmmo, source))
+                                    weaponName, 
+                                    weaponItem.metadata.ammo or 0, 
+                                    expectedAmmo, 
+                                    source))
                             end
                         end
                         
                         -- ✅ APPLIQUER LES MODIFICATIONS SI NÉCESSAIRE
                         if needsUpdate then
                             exports.ox_inventory:SetMetadata(source, weaponItem.slot, newMetadata)
+                            
+                            -- ✅ FORCER LA MISE À JOUR CÔTÉ CLIENT
+                            TriggerClientEvent('gungame:forceAmmoUpdate', source, weaponName, expectedAmmo)
                         end
                     end
                 end

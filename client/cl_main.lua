@@ -736,32 +736,94 @@ AddEventHandler('gungame:equipWeapon', function(weapon)
         waitCount = waitCount + 1
     end
     
-    -- ✅ Attendre ox_inventory
-    Wait(400)
+    -- ✅ Attendre ox_inventory (plus long pour ox_inventory)
+    Wait(600)
     
-    -- ✅ Utiliser l'item
-    TriggerServerEvent('ox_inventory:useItem', weapon:lower(), nil)
+    -- ✅ POUR OX_INVENTORY: Utiliser l'export pour équiper directement
+    local success = exports.ox_inventory:useSlot(weapon:lower())
+    
+    if not success then
+        -- Fallback: méthode classique
+        TriggerServerEvent('ox_inventory:useItem', weapon:lower(), nil)
+    end
     
     -- ✅ Attendre que l'arme soit équipée
-    Wait(500)
+    Wait(800)
     
-    -- ✅ Vérifier et équiper
-    for i = 1, 5 do
+    -- ✅ Vérifier et forcer l'équipement
+    local equipped = false
+    for i = 1, 10 do
         if HasPedGotWeapon(ped, weaponHash, false) then
+            -- Forcer l'équipement actif
             SetCurrentPedWeapon(ped, weaponHash, true)
             
-            local maxAmmo = GetMaxAmmo(ped, weaponHash)
-            SetPedAmmo(ped, weaponHash, maxAmmo)
+            Wait(200)
             
-            playerData.currentWeapon = weapon
+            -- ✅ POUR OX_INVENTORY: Les munitions viennent des métadonnées
+            -- On force juste le rechargement du chargeur
+            local currentAmmo = GetAmmoInPedWeapon(ped, weaponHash)
             
             if Config.Debug then
-                print(string.format("^2[GunGame Equip]^7 ✅ Équipé: %s", weapon))
+                print(string.format("^2[GunGame Equip]^7 ✅ Équipé: %s (Munitions chargeur: %d)", 
+                    weapon, currentAmmo))
             end
             
+            -- Forcer le rechargement pour charger depuis les métadonnées
+            MakePedReload(ped)
+            
+            playerData.currentWeapon = weapon
+            equipped = true
             break
         end
-        Wait(200)
+        Wait(150)
+    end
+    
+    -- ✅ Vérifications multiples pour forcer le rechargement
+    if equipped then
+        -- Premier rechargement à 300ms
+        SetTimeout(300, function()
+            if HasPedGotWeapon(ped, weaponHash, false) and GetSelectedPedWeapon(ped) == weaponHash then
+                MakePedReload(ped)
+                
+                if Config.Debug then
+                    local ammo = GetAmmoInPedWeapon(ped, weaponHash)
+                    print(string.format("^3[GunGame Equip]^7 🔄 Rechargement 300ms (Munitions: %d)", ammo))
+                end
+            end
+        end)
+        
+        -- Deuxième rechargement à 800ms
+        SetTimeout(800, function()
+            if HasPedGotWeapon(ped, weaponHash, false) and GetSelectedPedWeapon(ped) == weaponHash then
+                MakePedReload(ped)
+                
+                if Config.Debug then
+                    local ammo = GetAmmoInPedWeapon(ped, weaponHash)
+                    print(string.format("^3[GunGame Equip]^7 🔄 Rechargement 800ms (Munitions: %d)", ammo))
+                end
+            end
+        end)
+        
+        -- Rechargement final à 1.5s
+        SetTimeout(1500, function()
+            if HasPedGotWeapon(ped, weaponHash, false) and GetSelectedPedWeapon(ped) == weaponHash then
+                local currentAmmo = GetAmmoInPedWeapon(ped, weaponHash)
+                
+                -- Si toujours 1 balle, forcer un dernier rechargement
+                if currentAmmo <= 1 then
+                    MakePedReload(ped)
+                    
+                    if Config.Debug then
+                        print(string.format("^1[GunGame Equip]^7 🔴 Rechargement forcé final"))
+                    end
+                end
+                
+                if Config.Debug then
+                    local finalAmmo = GetAmmoInPedWeapon(ped, weaponHash)
+                    print(string.format("^2[GunGame Equip]^7 ✅ État final (Munitions: %d)", finalAmmo))
+                end
+            end
+        end)
     end
 end)
 
@@ -1330,6 +1392,20 @@ AddEventHandler('gungame:forceSync', function(weaponIndex, weaponKills)
 end)
 
 
+RegisterNetEvent('gungame:forceAmmoUpdate')
+AddEventHandler('gungame:forceAmmoUpdate', function(weaponName, ammoCount)
+    local ped = PlayerPedId()
+    local weaponHash = GetHashKey(weaponName)
+    
+    if HasPedGotWeapon(ped, weaponHash, false) then
+        SetPedAmmo(ped, weaponHash, ammoCount)
+        
+        if Config.Debug then
+            print(string.format("^2[GunGame Ammo]^7 ✅ Munitions forcées: %s = %d", weaponName, ammoCount))
+        end
+    end
+end)
+
 
 
 
@@ -1581,6 +1657,40 @@ Citizen.CreateThread(function()
                 deathNotificationSent = false
             end
             Wait(500)
+        end
+    end
+end)
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(1000) -- Vérification chaque seconde
+        
+        if playerData.inGame and not isRespawning then
+            local ped = PlayerPedId()
+            local currentWeaponIndex = playerData.currentWeaponIndex or 1
+            local expectedWeapon = Config.Weapons[currentWeaponIndex]
+            
+            if expectedWeapon then
+                local weaponHash = GetHashKey(expectedWeapon)
+                
+                if HasPedGotWeapon(ped, weaponHash, false) then
+                    local currentAmmo = GetAmmoInPedWeapon(ped, weaponHash)
+                    local maxAmmo = GetMaxAmmo(ped, weaponHash)
+                    local expectedAmmo = Config.WeaponAmmo[expectedWeapon] or 500
+                    
+                    -- ✅ SI MUNITIONS TROP BASSES, FORCER LE RECHARGEMENT
+                    if currentAmmo < 10 then
+                        SetPedAmmo(ped, weaponHash, expectedAmmo)
+                        
+                        if Config.Debug then
+                            print(string.format("^3[GunGame Auto-Fix]^7 🔧 Munitions forcées: %s = %d (avant: %d)", 
+                                expectedWeapon, expectedAmmo, currentAmmo))
+                        end
+                    end
+                end
+            end
+        else
+            Wait(2000)
         end
     end
 end)
