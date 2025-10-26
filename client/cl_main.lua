@@ -83,7 +83,7 @@ function drawGunGameHUD()
     local startY = 0.015
     local lineHeight = 0.027
     local boxWidth = 0.22
-    local boxHeight = 0.32 -- Augmenté pour le leaderboard
+    local boxHeight = 0.32
 
     -- Background
     DrawRect(startX + boxWidth/2, startY + boxHeight/2, boxWidth, boxHeight, 0, 0, 0, 215)
@@ -232,149 +232,46 @@ function drawGunGameHUD()
         currentY = currentY + lineHeight + 0.004
     end
     
-    -- 🏆 LEADERBOARD
-    
+    -- 👑 AFFICHAGE DU LEADER (REMPLACE LE GODMODE)
+    -- Afficher uniquement s'il y a des joueurs dans le leaderboard
     if leaderboardData and #leaderboardData > 0 then
-
-        -- Titre LEADERBOARD
-        SetTextFont(4)
-        SetTextScale(0.0, 0.32)
-        SetTextCentre(true)
-        SetTextColour(255, 215, 0, 255)
-        SetTextEntry("STRING")
-        AddTextComponentString("🏆 CLASSEMENT")
-        DrawText(startX + boxWidth/2, currentY + 0.06)
-        currentY = currentY + lineHeight + 0.06
+        local leader = leaderboardData[1] -- Le premier du classement
+        local isLeader = leader.source == GetPlayerServerId(PlayerId())
         
-        -- Afficher le TOP 3
-        local maxDisplay = math.min(3, #leaderboardData)
-        
-        for i = 1, maxDisplay do
-            local player = leaderboardData[i]
-            local isMe = player.source == GetPlayerServerId(PlayerId())
-            
-            -- Icône de position
-            local positionIcon = ""
-            local iconColor = {255, 255, 255}
-            
-            if i == 1 then
-                positionIcon = "🥇"
-                iconColor = {255, 215, 0} -- Or
-            elseif i == 2 then
-                positionIcon = "🥈"
-                iconColor = {192, 192, 192} -- Argent
-            elseif i == 3 then
-                positionIcon = "🥉"
-                iconColor = {205, 127, 50} -- Bronze
-            else
-                positionIcon = tostring(i) .. "."
-                iconColor = {255, 255, 255}
-            end
-            
-            -- Background si c'est nous
-            if isMe then
-                DrawRect(startX + boxWidth/2, currentY + 0.010, boxWidth - 0.03, 0.022, 0, 255, 136, 100)
-            end
-            
-            -- Position + Nom
-            SetTextFont(0)
-            SetTextScale(0.0, 0.26)
-            SetTextColour(iconColor[1], iconColor[2], iconColor[3], 255)
-            SetTextEntry("STRING")
-            AddTextComponentString(positionIcon)
-            DrawText(startX + 0.018, currentY)
-            
-            -- Nom du joueur (tronqué si trop long)
-            local displayName = player.name
-            if string.len(displayName) > 12 then
-                displayName = string.sub(displayName, 1, 12) .. "..."
-            end
-            
-            SetTextFont(0)
-            SetTextScale(0.0, 0.26)
-            SetTextColour(isMe and 0 or 255, isMe and 255 or 255, isMe and 136 or 255, 255)
-            SetTextEntry("STRING")
-            AddTextComponentString(displayName)
-            DrawText(startX + 0.045, currentY)
-            
-            -- Arme actuelle
-            SetTextFont(4)
-            SetTextScale(0.0, 0.26)
-            SetTextRightJustify(true)
-            SetTextWrap(0.0, startX + boxWidth - 0.018)
-            SetTextColour(255, 0, 0, 255)
-            SetTextEntry("STRING")
-            AddTextComponentString(player.weaponIndex .. "/" .. maxWeapons)
-            DrawText(0, currentY)
-            
-            currentY = currentY + lineHeight - 0.003
-        end
-        
-        -- Afficher notre position si on n'est pas dans le top 3
-        local myPosition = nil
-        local myData = nil
-        
-        for i, player in ipairs(leaderboardData) do
-            if player.source == GetPlayerServerId(PlayerId()) then
-                myPosition = i
-                myData = player
-                break
-            end
-        end
-        
-        if myPosition and myPosition > 3 then
-            currentY = currentY + 0.005
-            
-            -- Séparateur
-            DrawRect(startX + boxWidth/2, currentY, boxWidth - 0.04, 0.001, 100, 100, 100, 150)
-            currentY = currentY + 0.008
-            
-            -- Background
-            DrawRect(startX + boxWidth/2, currentY + 0.010, boxWidth - 0.03, 0.022, 0, 255, 136, 100)
-            
-            -- Position
-            SetTextFont(0)
-            SetTextScale(0.0, 0.26)
-            SetTextColour(255, 255, 255, 255)
-            SetTextEntry("STRING")
-            AddTextComponentString(myPosition .. ".")
-            DrawText(startX + 0.018, currentY)
-            
-            -- Nom (Vous)
-            SetTextFont(0)
-            SetTextScale(0.0, 0.26)
-            SetTextColour(0, 255, 136, 255)
-            SetTextEntry("STRING")
-            AddTextComponentString("Vous")
-            DrawText(startX + 0.045, currentY)
-            
-            -- Arme
-            SetTextFont(4)
-            SetTextScale(0.0, 0.26)
-            SetTextRightJustify(true)
-            SetTextWrap(0.0, startX + boxWidth - 0.018)
-            SetTextColour(255, 0, 0, 255)
-            SetTextEntry("STRING")
-            AddTextComponentString(myData.weaponIndex .. "/" .. maxWeapons)
-            DrawText(0, currentY)
-        end
-    end
-    
-    -- GODMODE (à la fin)
-    
-    if godMode then
+        -- Position en bas du HUD
         currentY = startY + boxHeight - 0.045
         
-        local alpha = math.floor(200 + 55 * math.sin(GetGameTimer() / 300))
-        DrawRect(startX + boxWidth/2, currentY + 0.014, boxWidth - 0.02, 0.028, 255, 215, 0, alpha)
+        -- Animation de pulsation pour le leader
+        local alpha = math.floor(180 + 75 * math.sin(GetGameTimer() / 400))
+        
+        -- Couleur différente selon si c'est nous ou pas
+        if isLeader then
+            -- Si on est le leader: fond vert brillant
+            DrawRect(startX + boxWidth/2, currentY + 0.014, boxWidth - 0.02, 0.028, 0, 255, 136, alpha)
+        else
+            -- Si on n'est pas le leader: fond or avec nom du leader
+            DrawRect(startX + boxWidth/2, currentY + 0.014, boxWidth - 0.02, 0.028, 255, 215, 0, math.floor(alpha * 0.8))
+        end
         
         SetTextFont(4)
         SetTextProportional(1)
-        SetTextScale(0.0, 0.38)
+        SetTextScale(0.0, 0.32)
         SetTextColour(0, 0, 0, 255)
         SetTextEntry("STRING")
         SetTextCentre(true)
-        AddTextComponentString("INVINCIBLE")
+        
+        if isLeader then
+            -- Si on est le leader
+            AddTextComponentString("👑 VOUS ÊTES LEADER")
+        else
+            -- Afficher le nom du leader avec son arme (tronqué si nécessaire)
+            local leaderName = leader.name
+            if string.len(leaderName) > 12 then
+                leaderName = string.sub(leaderName, 1, 12) .. "..."
+            end
+            AddTextComponentString("👑 " .. leaderName:upper() .. " [" .. leader.weaponIndex .. "/" .. maxWeapons .. "]")
+        end
+        
         DrawText(startX + boxWidth/2, currentY)
     end
 end
