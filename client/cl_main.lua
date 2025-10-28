@@ -477,17 +477,35 @@ local function canClaimKill(victim)
     
     -- 1. Vérifier qu'on est bien en vie
     if IsEntityDead(playerPed) then
+        if Config.Debug then
+            print("^3[GunGame Kill]^7 ⚠️ Tueur mort, kill refusé")
+        end
         return false
     end
     
-    -- 2. Vérifier que la victime est morte
+    -- 2. Vérifier que la victime est VRAIMENT morte
     if not IsEntityDead(victim) then
+        if Config.Debug then
+            print("^3[GunGame Kill]^7 ⚠️ Victime pas morte, kill refusé")
+        end
+        return false
+    end
+    
+    -- ✅ NOUVEAU: Vérifier la santé de la victime
+    local victimHealth = GetEntityHealth(victim)
+    if victimHealth > 100 then
+        if Config.Debug then
+            print(string.format("^3[GunGame Kill]^7 ⚠️ Victime santé > 100 (%d), kill refusé", victimHealth))
+        end
         return false
     end
     
     -- 3. Vérifier qu'on a bien une arme équipée
     local currentWeapon = GetSelectedPedWeapon(playerPed)
     if currentWeapon == GetHashKey("WEAPON_UNARMED") then
+        if Config.Debug then
+            print("^3[GunGame Kill]^7 ⚠️ Pas d'arme, kill refusé")
+        end
         return false
     end
     
@@ -623,7 +641,7 @@ AddEventHandler('gungame:equipWeapon', function(weapon)
     local weaponHash = GetHashKey(weapon)
     
     if Config.Debug then
-        print(string.format("^5[GunGame Equip]^7 Équipement: %s", weapon))
+        print(string.format("^5[GunGame Equip]^7 Équipement client: %s", weapon))
     end
     
     -- ✅ Attendre que respawn soit fini
@@ -633,94 +651,33 @@ AddEventHandler('gungame:equipWeapon', function(weapon)
         waitCount = waitCount + 1
     end
     
-    -- ✅ Attendre ox_inventory (plus long pour ox_inventory)
-    Wait(600)
+    -- ✅ Attendre ox_inventory
+    Wait(400)
     
-    -- ✅ POUR OX_INVENTORY: Utiliser l'export pour équiper directement
+    -- ✅ Équiper via ox_inventory
     local success = exports.ox_inventory:useSlot(weapon:lower())
     
     if not success then
-        -- Fallback: méthode classique
         TriggerServerEvent('ox_inventory:useItem', weapon:lower(), nil)
     end
     
-    -- ✅ Attendre que l'arme soit équipée
-    Wait(800)
+    Wait(600)
     
-    -- ✅ Vérifier et forcer l'équipement
-    local equipped = false
-    for i = 1, 10 do
-        if HasPedGotWeapon(ped, weaponHash, false) then
-            -- Forcer l'équipement actif
-            SetCurrentPedWeapon(ped, weaponHash, true)
-            
-            Wait(200)
-            
-            -- ✅ POUR OX_INVENTORY: Les munitions viennent des métadonnées
-            -- On force juste le rechargement du chargeur
+    -- ✅ Vérifier l'équipement
+    if HasPedGotWeapon(ped, weaponHash, false) then
+        SetCurrentPedWeapon(ped, weaponHash, true)
+        
+        if Config.Debug then
             local currentAmmo = GetAmmoInPedWeapon(ped, weaponHash)
-            
-            if Config.Debug then
-                print(string.format("^2[GunGame Equip]^7 ✅ Équipé: %s (Munitions chargeur: %d)", 
-                    weapon, currentAmmo))
-            end
-            
-            -- Forcer le rechargement pour charger depuis les métadonnées
-            MakePedReload(ped)
-            
-            playerData.currentWeapon = weapon
-            equipped = true
-            break
+            print(string.format("^2[GunGame Equip]^7 ✅ Équipé: %s (Munitions: %d)", 
+                weapon, currentAmmo))
         end
-        Wait(150)
-    end
-    
-    -- ✅ Vérifications multiples pour forcer le rechargement
-    if equipped then
-        -- Premier rechargement à 300ms
-        SetTimeout(300, function()
-            if HasPedGotWeapon(ped, weaponHash, false) and GetSelectedPedWeapon(ped) == weaponHash then
-                MakePedReload(ped)
-                
-                if Config.Debug then
-                    local ammo = GetAmmoInPedWeapon(ped, weaponHash)
-                    print(string.format("^3[GunGame Equip]^7 🔄 Rechargement 300ms (Munitions: %d)", ammo))
-                end
-            end
-        end)
         
-        -- Deuxième rechargement à 800ms
-        SetTimeout(800, function()
-            if HasPedGotWeapon(ped, weaponHash, false) and GetSelectedPedWeapon(ped) == weaponHash then
-                MakePedReload(ped)
-                
-                if Config.Debug then
-                    local ammo = GetAmmoInPedWeapon(ped, weaponHash)
-                    print(string.format("^3[GunGame Equip]^7 🔄 Rechargement 800ms (Munitions: %d)", ammo))
-                end
-            end
-        end)
-        
-        -- Rechargement final à 1.5s
-        SetTimeout(1500, function()
-            if HasPedGotWeapon(ped, weaponHash, false) and GetSelectedPedWeapon(ped) == weaponHash then
-                local currentAmmo = GetAmmoInPedWeapon(ped, weaponHash)
-                
-                -- Si toujours 1 balle, forcer un dernier rechargement
-                if currentAmmo <= 1 then
-                    MakePedReload(ped)
-                    
-                    if Config.Debug then
-                        print(string.format("^1[GunGame Equip]^7 🔴 Rechargement forcé final"))
-                    end
-                end
-                
-                if Config.Debug then
-                    local finalAmmo = GetAmmoInPedWeapon(ped, weaponHash)
-                    print(string.format("^2[GunGame Equip]^7 ✅ État final (Munitions: %d)", finalAmmo))
-                end
-            end
-        end)
+        playerData.currentWeapon = weapon
+    else
+        if Config.Debug then
+            print(string.format("^1[GunGame Equip]^7 ❌ Échec équipement: %s", weapon))
+        end
     end
 end)
 
@@ -856,97 +813,6 @@ AddEventHandler('gungame:syncLeaderboard', function(data)
     end
 end)
 
--- gameEventTriggered (KILLS)
-
-AddEventHandler('gameEventTriggered', function(eventName, data)
-    if not playerData.inGame then return end
-    
-    if eventName == 'CEventNetworkEntityDamage' then
-        local victim = data[1]
-        local attacker = data[2]
-        local isDead = data[4] == 1
-        local weaponHash = data[5]
-        
-        local playerPed = PlayerPedId()
-        local currentTime = GetGameTimer()
-        
-        -- ✅ VÉRIFICATIONS DE BASE
-        if not isDead then return end
-        if attacker ~= playerPed then return end
-        if victim == playerPed then return end
-        
-        -- ✅ VÉRIFIER SI ON PEUT CLAIM CE KILL
-        if not canClaimKill(victim) then
-            if Config.Debug then
-                print("^3[GunGame Kill]^7 Kill refusé (canClaimKill = false)")
-            end
-            return
-        end
-        
-        -- ✅ ANTI-DOUBLON LOCAL
-        if processedDeaths[victim] then
-            local timeSinceProcessed = currentTime - processedDeaths[victim]
-            if timeSinceProcessed < 3000 then
-                if Config.Debug then
-                    print("^3[GunGame Kill]^7 Kill doublon détecté (ignoré)")
-                end
-                return
-            end
-        end
-        
-        if recentKills[victim] then
-            if Config.Debug then
-                print("^3[GunGame Kill]^7 Kill récent détecté (ignoré)")
-            end
-            return
-        end
-        
-        -- ✅ COOLDOWN GLOBAL
-        if currentTime - lastKillTime < killCooldown then
-            if Config.Debug then
-                print("^3[GunGame Kill]^7 Cooldown actif (ignoré)")
-            end
-            return
-        end
-        
-        -- ✅ ENREGISTRER LE KILL LOCALEMENT
-        lastKillTime = currentTime
-        recentKills[victim] = currentTime
-        processedDeaths[victim] = currentTime
-        
-        -- ✅ ATTENDRE UN COURT DÉLAI AVANT D'ENVOYER AU SERVEUR
-        SetTimeout(150, function()
-            -- Double vérification que le kill est toujours valide
-            if not IsEntityDead(playerPed) and IsEntityDead(victim) then
-                
-                -- ✅ DIFFÉRENCIER JOUEUR/BOT
-                if IsPedAPlayer(victim) then
-                    local targetPlayerId = NetworkGetPlayerIndexFromPed(victim)
-                    if targetPlayerId ~= -1 then
-                        local targetServerId = GetPlayerServerId(targetPlayerId)
-                        
-                        if Config.Debug then
-                            print(string.format("^2[GunGame Kill]^7 → Kill joueur confirmé: %d", targetServerId))
-                        end
-                        
-                        TriggerServerEvent('gungame:registerKill', targetServerId, false)
-                    end
-                else
-                    if Config.Debug then
-                        print("^2[GunGame Kill]^7 → Kill NPC/Bot confirmé")
-                    end
-                    
-                    TriggerServerEvent('gungame:registerKill', nil, true)
-                end
-            else
-                if Config.Debug then
-                    print("^3[GunGame Kill]^7 Kill annulé (vérification échouée)")
-                end
-            end
-        end)
-    end
-end)
-
 
 RegisterNetEvent('gungame:syncWeaponKills')
 AddEventHandler('gungame:syncWeaponKills', function(newKillCount)
@@ -1008,26 +874,25 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
     local ped = PlayerPedId()
     local isWinner = winnerName == GetPlayerName(PlayerId())
     
-    -- ✅ S'ASSURER QU'ON EST VIVANT
-    local health = GetEntityHealth(ped)
-    if health <= 105 then
-        if Config.Debug then
-            print("^3[GunGame Victory]^7 Joueur mort, attente du revive...")
-        end
-        
-        -- Attendre d'être revive (max 2 secondes)
-        local waitCount = 0
-        while GetEntityHealth(ped) <= 105 and waitCount < 20 do
-            Wait(100)
-            waitCount = waitCount + 1
-        end
-        
-        if Config.Debug then
-            print("^2[GunGame Victory]^7 Joueur revive, santé: " .. GetEntityHealth(ped))
-        end
+    if Config.Debug then
+        print(string.format("^2[GunGame Victory]^7 🏆 Victoire détectée. Gagnant: %s", winnerName))
     end
     
-    -- ✅ NOTIFICATION DE VICTOIRE
+    -- ✅ ÉTAPE 1: NETTOYER ARMES IMMÉDIATEMENT
+    for _, weapon in ipairs(Config.Weapons) do
+        local weaponHash = GetHashKey(weapon)
+        if HasPedGotWeapon(ped, weaponHash, false) then
+            RemoveWeaponFromPed(ped, weaponHash)
+        end
+    end
+    RemoveAllPedWeapons(ped, true)
+    
+    -- ✅ ÉTAPE 2: DEMANDER NETTOYAGE SERVEUR
+    TriggerServerEvent('gungame:cleanInventoryOnVictory')
+    
+    Wait(300)
+    
+    -- ✅ ÉTAPE 3: NOTIFICATIONS
     lib.notify({
         title = '🏆 VICTOIRE !',
         description = winnerName .. ' a remporté la partie !',
@@ -1035,7 +900,6 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
         duration = 5000
     })
     
-    -- ✅ RÉCOMPENSE SI C'EST NOUS
     if isWinner then
         lib.notify({
             title = '💰 Récompense',
@@ -1045,78 +909,81 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
         })
     end
     
-    -- ✅ ATTENDRE 3 SECONDES PUIS FORCER LE RETOUR
+    -- ✅ ÉTAPE 4: ATTENDRE 3 SECONDES PUIS TP (FORCÉ)
     SetTimeout(3000, function()
         local lastSpawn = playerData.lastSpawnPoint
         
-        -- ✅ 1. FADE OUT
+        if Config.Debug then
+            print("^2[GunGame Victory]^7 🚀 DÉBUT TP DE FIN")
+        end
+        
+        -- ✅ FADE OUT OBLIGATOIRE
         DoScreenFadeOut(500)
-        while not IsScreenFadedOut() do Wait(0) end
         
-        -- ✅ 2. FORCER LA SANTÉ AU MAXIMUM (au cas où)
-        SetEntityHealth(ped, 200)
+        local fadeWait = 0
+        while not IsScreenFadedOut() and fadeWait < 20 do
+            Wait(50)
+            fadeWait = fadeWait + 1
+        end
         
-        Wait(200)
+        if Config.Debug then
+            print("^2[GunGame Victory]^7 📺 Fade out terminé")
+        end
         
-        -- ✅ 3. NETTOYER TOUTES LES ARMES
-        RemoveAllPedWeapons(ped, true)
-        TriggerEvent('ox_inventory:disarm', true)
+        Wait(300)
         
-        Wait(100)
+        -- ✅ TRIPLE NETTOYAGE ARMES
+        for i = 1, 3 do
+            RemoveAllPedWeapons(ped, true)
+            Wait(100)
+        end
         
-        -- ✅ 4. NETTOYER LES BLIPS
+        -- ✅ NETTOYER BLIPS
         removeGunGameZoneBlip()
         RemoveAllPlayerBlips()
         
-        -- ✅ 5. TÉLÉPORTATION FORCÉE
+        Wait(200)
+        
+        -- ✅ TP FORCÉ (AVEC MULTIPLES TENTATIVES)
         if lastSpawn then
             if Config.Debug then
-                print("^2[GunGame Victory]^7 TP vers position sauvegardée")
+                print(string.format("^2[GunGame Victory]^7 📍 TP vers (%.1f, %.1f, %.1f)", 
+                    lastSpawn.x, lastSpawn.y, lastSpawn.z))
             end
             
-            -- Première tentative
+            -- Tentative 1: SetEntityCoords
             SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
-            Wait(300)
+            Wait(200)
             
-            -- Vérifier si le TP a fonctionné
-            local newCoords = GetEntityCoords(ped)
-            local distance = #(vector3(lastSpawn.x, lastSpawn.y, lastSpawn.z) - newCoords)
-            
-            if distance > 5.0 then
-                if Config.Debug then
-                    print("^3[GunGame Victory]^7 TP raté, nouvelle tentative...")
-                end
-                SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
-                Wait(200)
-            end
-            
-            -- Forcer la position au sol
+            -- Tentative 2: SetPedCoordsKeepVehicle (au cas où)
             SetPedCoordsKeepVehicle(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z)
-            ClearPedTasksImmediately(ped)
+            Wait(200)
             
+            -- Tentative 3: RequestCollisionAtCoord (charger la zone)
+            RequestCollisionAtCoord(lastSpawn.x, lastSpawn.y, lastSpawn.z)
+            Wait(200)
+            
+            -- Tentative 4: Re-tp (sécurité)
+            SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
+            
+            ClearPedTasksImmediately(ped)
         else
             if Config.Debug then
-                print("^3[GunGame Victory]^7 Pas de position sauvegardée, TP hôpital")
+                print("^3[GunGame Victory]^7 ⚠️ Pas de spawn sauvegardé, TP hôpital")
             end
             
-            -- Fallback vers l'hôpital
             local hospitalCoords = vector3(307.7, -1433.4, 29.9)
             SetEntityCoords(ped, hospitalCoords.x, hospitalCoords.y, hospitalCoords.z, false, false, false, true)
             Wait(200)
             ClearPedTasksImmediately(ped)
         end
         
-        -- ✅ 6. VÉRIFIER QU'ON EST BIEN VIVANT
-        local finalHealth = GetEntityHealth(ped)
-        if finalHealth <= 105 then
-            if Config.Debug then
-                print("^1[GunGame Victory]^7 Joueur encore mort, revive forcé")
-            end
-            -- Dernier recours: demander un revive au serveur
-            TriggerServerEvent('gungame:forceReviveOnVictory')
-        end
+        Wait(300)
         
-        -- ✅ 7. RÉINITIALISER L'ÉTAT LOCAL
+        -- ✅ DERNIER NETTOYAGE ARMES
+        RemoveAllPedWeapons(ped, true)
+        
+        -- ✅ RÉINITIALISER ÉTAT LOCAL
         playerData.inGame = false
         playerData.instanceId = nil
         playerData.mapId = nil
@@ -1127,18 +994,19 @@ AddEventHandler('gungame:playerWon', function(winnerName, reward)
         playerData.godMode = false
         playerData.lastSpawnPoint = nil
         
-        -- ✅ 8. CACHER L'UI
         lib.hideTextUI()
         
-        -- ✅ 9. VÉRIFICATION FINALE : PLUS D'ARMES
-        Wait(200)
-        RemoveAllPedWeapons(ped, true)
-        
-        -- ✅ 10. FADE IN
+        -- ✅ FADE IN FORCÉ
         DoScreenFadeIn(700)
         
+        local fadeInWait = 0
+        while not IsScreenFadedIn() and fadeInWait < 20 do
+            Wait(50)
+            fadeInWait = fadeInWait + 1
+        end
+        
         if Config.Debug then
-            print("^2[GunGame Victory]^7 Retour au monde normal terminé")
+            print("^2[GunGame Victory]^7 ✅ TP DE FIN TERMINÉ")
         end
     end)
 end)
@@ -1207,23 +1075,35 @@ AddEventHandler('gungame:clientRotationForceQuit', function()
     local ped = PlayerPedId()
     local lastSpawn = playerData.lastSpawnPoint
     
+    if Config.Debug then
+        print("^3[GunGame Rotation]^7 Rotation forcée, nettoyage...")
+    end
+    
     -- Fade out
     DoScreenFadeOut(500)
     while not IsScreenFadedOut() do Wait(0) end
     
-    -- ✅ TP AMÉLIORÉ
+    -- ✅ NETTOYER ARMES CLIENT
+    for _, weapon in ipairs(Config.Weapons) do
+        local weaponHash = GetHashKey(weapon)
+        if HasPedGotWeapon(ped, weaponHash, false) then
+            RemoveWeaponFromPed(ped, weaponHash)
+        end
+    end
+    RemoveAllPedWeapons(ped, true)
+    
+    Wait(200)
+    
+    -- ✅ TP
     if lastSpawn then
-        
         SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
         Wait(300)
         ClearPedTasksImmediately(ped)
     else
-        print("^3[GunGame Rotation]^7 Pas de position, fallback hôpital")
         SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
     end
     
     -- Nettoyer
-    RemoveAllPedWeapons(ped, true)
     removeGunGameZoneBlip()
     RemoveAllPlayerBlips()
     
@@ -1238,7 +1118,10 @@ AddEventHandler('gungame:clientRotationForceQuit', function()
     
     lib.hideTextUI()
     
-    -- Fade in
+    -- ✅ DOUBLE CHECK
+    Wait(200)
+    RemoveAllPedWeapons(ped, true)
+    
     DoScreenFadeIn(700)
 end)
 
@@ -1286,21 +1169,6 @@ AddEventHandler('gungame:forceSync', function(weaponIndex, weaponKills)
     
     playerData.currentWeaponIndex = weaponIndex
     playerData.weaponKills = weaponKills
-end)
-
-
-RegisterNetEvent('gungame:forceAmmoUpdate')
-AddEventHandler('gungame:forceAmmoUpdate', function(weaponName, ammoCount)
-    local ped = PlayerPedId()
-    local weaponHash = GetHashKey(weaponName)
-    
-    if HasPedGotWeapon(ped, weaponHash, false) then
-        SetPedAmmo(ped, weaponHash, ammoCount)
-        
-        if Config.Debug then
-            print(string.format("^2[GunGame Ammo]^7 ✅ Munitions forcées: %s = %d", weaponName, ammoCount))
-        end
-    end
 end)
 
 
@@ -1378,52 +1246,87 @@ Citizen.CreateThread(function()
     end
 end)
 
--- Détection par HasEntityBeenDamagedByWeapon 
-    Citizen.CreateThread(function()
-        while true do
-            Wait(100)
+-- Détéction des kills
+
+Citizen.CreateThread(function()
+    while true do
+        Wait(100)
+        
+        if playerData.inGame then
+            local playerPed = PlayerPedId()
             
-            if playerData.inGame then
-                local playerPed = PlayerPedId()
+            -- ✅ VÉRIFIER QU'ON EST VIVANT
+            if not IsEntityDead(playerPed) then
                 local playerWeapon = GetSelectedPedWeapon(playerPed)
                 
-                -- Scanner tous les peds proches
-                local coords = GetEntityCoords(playerPed)
-                local nearbyPeds = GetGamePool('CPed')
-                
-                for _, ped in ipairs(nearbyPeds) do
-                    if ped ~= playerPed and DoesEntityExist(ped) then
-                        -- Vérifier si on a tué ce ped avec notre arme
-                        if HasEntityBeenDamagedByWeapon(ped, playerWeapon, 0) then
-                            if IsEntityDead(ped) and not recentKills[ped] then
-                                local currentTime = GetGameTimer()
+                -- ✅ VÉRIFIER QU'ON A UNE ARME
+                if playerWeapon ~= GetHashKey("WEAPON_UNARMED") then
+                    local coords = GetEntityCoords(playerPed)
+                    local nearbyPeds = GetGamePool('CPed')
+                    
+                    for _, ped in ipairs(nearbyPeds) do
+                        if ped ~= playerPed and DoesEntityExist(ped) then
+                            
+                            -- ✅ TRIPLE VÉRIFICATION DE MORT
+                            -- 1. Le ped a pris des dégâts de notre arme
+                            if HasEntityBeenDamagedByWeapon(ped, playerWeapon, 0) then
                                 
-                                if currentTime - lastKillTime > killCooldown then
-                                    lastKillTime = currentTime
-                                    recentKills[ped] = currentTime
+                                -- 2. Le ped est VRAIMENT mort (santé <= 0)
+                                local pedHealth = GetEntityHealth(ped)
+                                
+                                -- ✅ NOUVELLE CONDITION ULTRA-STRICTE
+                                if pedHealth == 0 and IsEntityDead(ped) and IsPedDeadOrDying(ped, true) then
                                     
-                                    if IsPedAPlayer(ped) then
-                                        local targetPlayerId = NetworkGetPlayerIndexFromPed(ped)
-                                        if targetPlayerId ~= -1 then
-                                            local targetServerId = GetPlayerServerId(targetPlayerId)
-                                            TriggerServerEvent('gungame:registerKill', targetServerId, false)
+                                    -- 3. Pas déjà compté
+                                    if not recentKills[ped] then
+                                        local currentTime = GetGameTimer()
+                                        
+                                        -- 4. Cooldown global
+                                        if currentTime - lastKillTime > killCooldown then
+                                            
+                                            -- ✅ ATTENDRE 200ms POUR ÊTRE SÛR
+                                            Wait(200)
+                                            
+                                            -- ✅ RE-VÉRIFIER (le ped peut avoir été ressuscité entre-temps)
+                                            if IsEntityDead(ped) and GetEntityHealth(ped) == 0 then
+                                                
+                                                lastKillTime = currentTime
+                                                recentKills[ped] = currentTime
+                                                
+                                                if Config.Debug then
+                                                    print(string.format("^2[GunGame Kill]^7 ✅ Kill CONFIRMÉ (Santé: 0)"))
+                                                end
+                                                
+                                                if IsPedAPlayer(ped) then
+                                                    local targetPlayerId = NetworkGetPlayerIndexFromPed(ped)
+                                                    if targetPlayerId ~= -1 then
+                                                        local targetServerId = GetPlayerServerId(targetPlayerId)
+                                                        TriggerServerEvent('gungame:registerKill', targetServerId, false)
+                                                    end
+                                                else
+                                                    TriggerServerEvent('gungame:registerKill', nil, true)
+                                                end
+                                            else
+                                                if Config.Debug then
+                                                    print(string.format("^3[GunGame Kill]^7 ⚠️ Faux positif évité (Santé: %d)", GetEntityHealth(ped)))
+                                                end
+                                            end
                                         end
-                                    else
-                                        TriggerServerEvent('gungame:registerKill', nil, true)
                                     end
                                 end
+                                
+                                -- Nettoyer le flag
+                                ClearEntityLastDamageEntity(ped)
                             end
-                            
-                            -- Nettoyer le flag de dégâts
-                            ClearEntityLastDamageEntity(ped)
                         end
                     end
                 end
-            else
-                Wait(1000)
             end
+        else
+            Wait(1000)
         end
-    end)
+    end
+end)
 
 -- DÉTECTION DES MORTS
 
@@ -1432,20 +1335,16 @@ Citizen.CreateThread(function()
     local wasAlive = false
     local lastHealth = 200
     local deathNotificationSent = false
+    local consecutiveDeadChecks = 0 -- ✅ NOUVEAU: Compteur de vérifications
+    local REQUIRED_DEAD_CHECKS = 3 -- ✅ Il faut 3 checks consécutifs pour confirmer
     
     while true do
-        Wait(50) -- ✅ Check rapide (50ms au lieu de 100ms)
+        Wait(100) -- ✅ Check toutes les 100ms (pas 50ms)
         
         if playerData.inGame and not isRespawning then
             local ped = PlayerPedId()
             local health = GetEntityHealth(ped)
-            local isCurrentlyDead = IsEntityDead(ped) -- ✅ Utiliser la native directement
-            
-            -- ✅ LOG DES CHANGEMENTS DE SANTÉ (DEBUG)
-            if Config.Debug and math.abs(health - lastHealth) > 10 then
-                print(string.format("^3[GunGame Health]^7 Santé: %d -> %d", lastHealth, health))
-            end
-            lastHealth = health
+            local isCurrentlyDead = IsEntityDead(ped)
             
             -- ✅ ATTENDRE QUE LE JOUEUR SOIT EN VIE AU MOINS UNE FOIS
             if not wasAlive and health > 105 and not isCurrentlyDead then
@@ -1455,73 +1354,73 @@ Citizen.CreateThread(function()
                 end
             end
             
-            -- ✅ DÉTECTION MULTI-MÉTHODE
+            -- ✅ DÉTECTION ULTRA-STRICTE
             local shouldBeDead = false
             
-            -- Méthode 1: Santé basse
-            if health <= 105 then
+            -- Condition 1: Santé = 0 (pas <= 105, mais exactement 0)
+            if health == 0 then
                 shouldBeDead = true
             end
             
-            -- Méthode 2: Native IsEntityDead
-            if isCurrentlyDead then
+            -- Condition 2: IsEntityDead + IsPedDeadOrDying
+            if isCurrentlyDead and IsPedDeadOrDying(ped, true) then
                 shouldBeDead = true
             end
             
-            -- Méthode 3: Ragdoll prolongé (joueur au sol)
-            if IsPedRagdoll(ped) then
-                local ragdollTime = GetPedConfigFlag(ped, 208, true)
-                if ragdollTime then
-                    shouldBeDead = true
-                end
-            end
-            
-            -- ✅ DÉCLENCHEMENT DE LA MORT
-            if shouldBeDead and not isDead and wasAlive then
-                isDead = true
-                deathNotificationSent = false
+            -- ✅ SYSTÈME DE CONFIRMATION PAR COMPTEUR
+            if shouldBeDead and wasAlive then
+                consecutiveDeadChecks = consecutiveDeadChecks + 1
                 
                 if Config.Debug then
-                    print(string.format("^1[GunGame Death]^7 💀 MORT DÉTECTÉE ! (Santé: %d, IsEntityDead: %s)", 
-                        health, tostring(isCurrentlyDead)))
+                    print(string.format("^3[GunGame Death]^7 Check mort %d/%d (Santé: %d)", 
+                        consecutiveDeadChecks, REQUIRED_DEAD_CHECKS, health))
                 end
                 
-                -- ✅ BLOQUER LE SYSTÈME DE REVIVE EXTERNE
-                -- Empêcher le joueur d'attendre 60 secondes
-                SetTimeout(100, function()
-                    -- Force le joueur à ne pas être en "état de mort" prolongé
+                -- ✅ SEULEMENT SI ON A 3 CHECKS CONSÉCUTIFS
+                if consecutiveDeadChecks >= REQUIRED_DEAD_CHECKS and not isDead then
+                    isDead = true
+                    deathNotificationSent = false
+                    
                     if Config.Debug then
-                        print("^3[GunGame Death]^7 Blocage du système de mort externe")
+                        print(string.format("^1[GunGame Death]^7 💀 MORT CONFIRMÉE ! (3 checks, Santé: %d)", health))
                     end
-                end)
-                
-                -- Retirer armes immédiatement
-                RemoveAllPedWeapons(ped, true)
-                
-                -- Notification (une seule fois)
-                if not deathNotificationSent then
-                    local respawnSeconds = math.floor(Config.GunGame.respawnDelay / 1000)
-                    lib.notify({
-                        title = '💀 Vous êtes mort',
-                        description = 'Respawn GunGame dans ' .. respawnSeconds .. 's',
-                        type = 'error',
-                        duration = Config.GunGame.respawnDelay
-                    })
-                    deathNotificationSent = true
-                end
-                
-                -- ✅ INFORMER LE SERVEUR IMMÉDIATEMENT
-                TriggerServerEvent('gungame:playerDeath')
-                
-                -- ✅ BACKUP: Si après 3 secondes toujours pas respawn, redemander
-                SetTimeout(3000, function()
-                    if isDead and playerData.inGame then
-                        if Config.Debug then
-                            print("^3[GunGame Death]^7 ⚠️ Pas de respawn après 3s, redemande au serveur")
+                    
+                    -- Retirer armes
+                    RemoveAllPedWeapons(ped, true)
+                    
+                    -- Notification
+                    if not deathNotificationSent then
+                        local respawnSeconds = math.floor(Config.GunGame.respawnDelay / 1000)
+                        lib.notify({
+                            title = '💀 Vous êtes mort',
+                            description = 'Respawn GunGame dans ' .. respawnSeconds .. 's',
+                            type = 'error',
+                            duration = Config.GunGame.respawnDelay
+                        })
+                        deathNotificationSent = true
+                    end
+                    
+                    -- Informer le serveur
+                    TriggerServerEvent('gungame:playerDeath')
+                    
+                    -- Backup respawn
+                    SetTimeout(3000, function()
+                        if isDead and playerData.inGame then
+                            if Config.Debug then
+                                print("^3[GunGame Death]^7 ⚠️ Backup respawn")
+                            end
+                            TriggerServerEvent('gungame:forceRespawn')
                         end
-                        TriggerServerEvent('gungame:forceRespawn')
+                    end)
+                end
+            else
+                -- ✅ RESET LE COMPTEUR SI LE JOUEUR EST VIVANT
+                if consecutiveDeadChecks > 0 then
+                    if Config.Debug then
+                        print(string.format("^2[GunGame Death]^7 Reset compteur (était à %d)", consecutiveDeadChecks))
                     end
-                end)
+                end
+                consecutiveDeadChecks = 0
             end
             
             -- ✅ RÉINITIALISER QUAND LE JOUEUR EST VIVANT
@@ -1529,29 +1428,24 @@ Citizen.CreateThread(function()
                 isDead = false
                 deathNotificationSent = false
                 wasAlive = true
+                consecutiveDeadChecks = 0
                 
                 if Config.Debug then
                     print(string.format("^2[GunGame Death]^7 ✅ Joueur revenu en vie (santé: %d)", health))
                 end
             end
             
-            -- ✅ BLOQUER CONTRÔLES SI MORT
+            -- ✅ BLOQUER CONTRÔLES SI MORT CONFIRMÉE
             if isDead then
                 DisableAllControlActions(0)
-                
-                -- ✅ EMPÊCHER LE SYSTÈME DE MORT EXTERNE DE PRENDRE LE DESSUS
-                -- Cela empêche le joueur de rester au sol 60 secondes
-                if IsPedDeadOrDying(ped, true) then
-                    -- On ne fait rien, on laisse le serveur gérer le respawn
-                end
             end
             
         else
-            -- ✅ RÉINITIALISER SI LE JOUEUR N'EST PLUS EN JEU
             if not playerData.inGame then
                 isDead = false
                 wasAlive = false
                 deathNotificationSent = false
+                consecutiveDeadChecks = 0
             end
             Wait(500)
         end
@@ -1560,7 +1454,7 @@ end)
 
 Citizen.CreateThread(function()
     while true do
-        Wait(1000) -- Vérification chaque seconde
+        Wait(3000)
         
         if playerData.inGame and not isRespawning then
             local ped = PlayerPedId()
@@ -1570,24 +1464,19 @@ Citizen.CreateThread(function()
             if expectedWeapon then
                 local weaponHash = GetHashKey(expectedWeapon)
                 
-                if HasPedGotWeapon(ped, weaponHash, false) then
-                    local currentAmmo = GetAmmoInPedWeapon(ped, weaponHash)
-                    local maxAmmo = GetMaxAmmo(ped, weaponHash)
-                    local expectedAmmo = Config.WeaponAmmo[expectedWeapon] or 500
-                    
-                    -- ✅ SI MUNITIONS TROP BASSES, FORCER LE RECHARGEMENT
-                    if currentAmmo < 10 then
-                        SetPedAmmo(ped, weaponHash, expectedAmmo)
-                        
-                        if Config.Debug then
-                            print(string.format("^3[GunGame Auto-Fix]^7 🔧 Munitions forcées: %s = %d (avant: %d)", 
-                                expectedWeapon, expectedAmmo, currentAmmo))
-                        end
+                -- ✅ Si l'arme a disparu, la redemander
+                if not HasPedGotWeapon(ped, weaponHash, false) then
+                    if Config.Debug then
+                        print(string.format("^1[GunGame Check]^7 ⚠️ Arme manquante: %s", expectedWeapon))
                     end
+                    
+                    TriggerServerEvent('gungame:requestCurrentWeapon')
+                    
+                    Wait(5000) -- Attendre 5s avant de revérifier
                 end
             end
         else
-            Wait(2000)
+            Wait(3000)
         end
     end
 end)
@@ -1885,9 +1774,29 @@ RegisterCommand('leavegame', function()
         local ped = PlayerPedId()
         local lastSpawn = playerData.lastSpawnPoint
         
-        -- Fade out pour transition propre
+        if Config.Debug then
+            print("^3[GunGame Leave]^7 Joueur quitte manuellement")
+        end
+        
+        -- Fade out
         DoScreenFadeOut(500)
         while not IsScreenFadedOut() do Wait(0) end
+        
+        -- ✅ NETTOYER ARMES CLIENT
+        for _, weapon in ipairs(Config.Weapons) do
+            local weaponHash = GetHashKey(weapon)
+            if HasPedGotWeapon(ped, weaponHash, false) then
+                RemoveWeaponFromPed(ped, weaponHash)
+            end
+        end
+        RemoveAllPedWeapons(ped, true)
+        
+        Wait(200)
+        
+        -- ✅ INFORMER LE SERVEUR DE NETTOYER
+        TriggerServerEvent('gungame:leaveGame')
+        
+        Wait(300)
         
         -- Nettoyer l'état
         playerData.inGame = false
@@ -1897,50 +1806,26 @@ RegisterCommand('leavegame', function()
         playerData.weaponKills = 0
         playerData.currentWeapon = nil
         
-        -- Retirer armes et UI
-        RemoveAllPedWeapons(ped, true)
         lib.hideTextUI()
         removeGunGameZoneBlip()
         RemoveAllPlayerBlips()
         
-        -- ✅ NOUVEAU : TP AMÉLIORÉ avec vérification
+        -- ✅ TP AMÉLIORÉ
         if lastSpawn then
-            
-            -- TP avec tous les flags pour éviter les bugs
             SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
-            
-            -- Attendre que le TP soit effectif
             Wait(300)
-            
-            -- Vérifier que le TP a bien fonctionné
-            local newCoords = GetEntityCoords(ped)
-            local distance = #(vector3(lastSpawn.x, lastSpawn.y, lastSpawn.z) - newCoords)
-            
-            if distance > 5.0 then
-                print("^3[GunGame]^7 TP initial raté, nouvelle tentative...")
-                SetEntityCoords(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z, false, false, false, true)
-                Wait(200)
-            end
-            
-            -- S'assurer que le joueur est bien au sol
             SetPedCoordsKeepVehicle(ped, lastSpawn.x, lastSpawn.y, lastSpawn.z)
-            
-            -- Nettoyer les tâches pour éviter les animations bizarres
             ClearPedTasksImmediately(ped)
         else
-            print("^1[GunGame]^7 ERREUR: Aucune position sauvegardée!")
-            
-            -- Fallback : TP à l'hôpital
             SetEntityCoords(ped, 307.7, -1433.4, 29.9, false, false, false, true)
             Wait(200)
         end
         
-        -- Fade in
-        DoScreenFadeIn(700)
+        -- ✅ DOUBLE CHECK ARMES
+        Wait(200)
+        RemoveAllPedWeapons(ped, true)
         
-        -- Attendre un peu avant d'informer le serveur
-        Wait(300)
-        TriggerServerEvent('gungame:leaveGame')
+        DoScreenFadeIn(700)
         
         lib.notify({
             title = 'GunGame',
@@ -1949,7 +1834,6 @@ RegisterCommand('leavegame', function()
             duration = 2000
         })
         
-        -- Réinitialiser la position sauvegardée
         playerData.lastSpawnPoint = nil
     else
         lib.notify({

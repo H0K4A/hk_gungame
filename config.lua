@@ -1,7 +1,8 @@
 Config = {}
 
 -- Activer/Désactiver le mode debug
-Config.Debug = true
+Config.Debug = false
+Config.Credits = true
 
 -- ============================================================================
 -- CONFIGURATION DU PED GUNGAME
