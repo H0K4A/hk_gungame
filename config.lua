@@ -1,8 +1,14 @@
 Config = {}
 
 -- Activer/Désactiver le mode debug
-Config.Debug = false
-Config.Credits = true
+Config.Debug = true
+
+Config.ReturnSpawn = {
+    x = 1366.839600,
+    y = -579.415406,
+    z = 74.369996,
+    heading = 62.362206
+}   
 
 -- ============================================================================
 -- CONFIGURATION DU PED GUNGAME
@@ -88,23 +94,17 @@ Config.SpawnSystem = {
 -- CONFIGURATION DU GUNGAME
 -- ============================================================================
 Config.GunGame = {
-    killsPerWeapon = 2,                 -- Kills nécessaires par arme
-    killsForLastWeapon = 1,             -- Kills pour la dernière arme
-    respawnDelay = 2000,                -- Délai de respawn (ms)
-    godmodeAfterSpawn = 3000,           -- Durée du godmode après spawn (ms)
-    giveAmmoPerSpawn = 500,             -- Munitions données au spawn
-    notifyOnKill = true,                -- Notification lors d'un kill
-    notifyOnDeath = true,               -- Notification lors d'une mort
+    killsPerWeapon = 2,
+    killsForLastWeapon = math.max(1, 1), -- ✅ Garantir minimum 1
+    respawnDelay = 2000,
+    godmodeAfterSpawn = 3000,
+    giveAmmoPerSpawn = 500,
+    notifyOnKill = true,
+    notifyOnDeath = true,
     
-    -- ✅ SYSTÈME DE RÉCOMPENSES
-    rewardPerWeapon = 125,              -- Récompense par arme complétée (125$ x 20 armes = 2500$)
-    victoryBonus = 500,                 -- Bonus supplémentaire pour la victoire
-    -- Total gagnant = (125 x 20) + 500 = 3000$
-    
-    -- Si vous voulez exactement 2000$ pour le gagnant :
-    -- rewardPerWeapon = 75,            -- 75$ x 20 armes = 1500$
-    -- victoryBonus = 500,              -- Bonus victoire = 500$
-    -- Total = 2000$
+    rewardPerWeapon = 125,
+    victoryBonus = 500,
+    maxReward = 2500, -- ✅ NOUVEAU: Limite de récompense
 }
 
 -- ============================================================================
@@ -236,7 +236,7 @@ Config.Maps = {
             x = 4945.147460,
             y = -5222.716308,
             z = 2.488648,
-            radius = 150.0
+            radius = 200.0
         },
         spawnPoints = {
             {x = 4918.483398, y = -5274.566894, z = 5.639526, heading = 314.645660},
@@ -302,7 +302,7 @@ Config.Maps = {
             x = 64.958252,
             y = -390.789001,
             z = 41.125244,
-            radius = 150.0
+            radius = 200.0
         },
         spawnPoints = {
             {x = 116.426376, y = -457.793396, z = 41.125244, heading =  178.582688},
@@ -434,7 +434,7 @@ Config.Maps = {
             x = 1669.556030,
             y = 4853.208984,
             z = 42.052002,
-            radius = 150.0
+            radius = 200.0
         },
         spawnPoints = {
             { x = 1649.090088, y = 4779.982422, z = 42.001464, heading = 8.503936},
